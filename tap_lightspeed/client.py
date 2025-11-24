@@ -1,12 +1,8 @@
-"""REST client handling, including LightspeedStream base class."""
+"""REST client handling, including LightspeedRSeriesStream base class."""
 
 from typing import Any, Dict, Iterable, Optional, Callable
-from pytz import timezone
-from datetime import datetime
 import urllib3
 import requests
-from pendulum import parse
-from singer_sdk.authenticators import BasicAuthenticator
 from singer_sdk.streams import RESTStream
 from singer_sdk.exceptions import RetriableAPIError, FatalAPIError
 import backoff
@@ -14,32 +10,37 @@ import copy
 from time import sleep
 from cached_property import cached_property
 from tap_lightspeed.exceptions import TooManyRequestsError
+from tap_lightspeed.auth import LightspeedOAuthAuthenticator
 from http.client import ImproperConnectionState, RemoteDisconnected
 import singer
 from singer import StateMessage
 
 
-class LightspeedStream(RESTStream):
-    """Lightspeed stream class."""
+class LightspeedXSeriesStream(RESTStream):
+    """Lightspeed Retail (X-Series) stream class."""
+
+    page_size = 100  # Default page size for Lightspeed R-Series API
+    timeout = 300  # 5 minutes timeout
+
+    @cached_property
+    def url_base(self) -> str:
+        """Return the API URL root for Lightspeed X-Series API.
+        
+        Base URL: https://{domain_prefix}.retail.lightspeed.app/api/2.0/
+        The domain_prefix is specific to each retailer account.
+        """
+        domain_prefix = self.config.get("domain_prefix")
+        if not domain_prefix:
+            raise ValueError(
+                "domain_prefix is required in config for Lightspeed X-Series API. "
+                "This is the retailer's domain prefix (e.g., 'mystore' for mystore.retail.lightspeed.app)"
+            )
+        return f"https://{domain_prefix}.retail.lightspeed.app/api/2.0"
 
     @property
-    def url_base(self):
-        language = self.config.get("language")
-        return f'{self.config.get("base_url")}/{language}'
-
-    replication_filter_field = None
-    end_date_param = "updated_at_max"
-    limit = 250
-    extra_retry_statuses = [429, 404] # there are temporary 404 for order endpoints
-
-    @property
-    def authenticator(self) -> BasicAuthenticator:
+    def authenticator(self) -> LightspeedOAuthAuthenticator:
         """Return a new authenticator object."""
-        return BasicAuthenticator.create_for_stream(
-            self,
-            username=self.config.get("api_key"),
-            password=self.config.get("api_secret"),
-        )
+        return LightspeedOAuthAuthenticator.create_for_stream(self)
 
     @property
     def http_headers(self) -> dict:
@@ -52,89 +53,72 @@ class LightspeedStream(RESTStream):
     def get_next_page_token(
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
-        """Return a token for identifying next page or None if no more pages."""
-        previous_token = previous_token or 1
-        if len(list(self.parse_response(response))) == self.limit:
-            next_page_token = previous_token + 1
-            return next_page_token
-
-    def get_starting_time(self, context):
-        start_date = self.config.get("start_date")
-        if start_date:
-            start_date = parse(self.config.get("start_date"))
-        rep_key = self.get_starting_timestamp(context)
-        return rep_key or start_date
-    
-    @cached_property
-    def end_date(self):
-        end_date = self.config.get("end_date")
-        if end_date is not None:
-            try:
-                end_date = parse(end_date)
-                end_date = end_date.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-            except:
-                self.logger.info(f"Failed while trying to parse end_date {end_date}, fetching data without end_date")
-                end_date = None
-        return end_date
+        """Return a token for identifying next page or None if no more pages.
+        
+        Lightspeed R-Series API uses offset-based pagination.
+        If the response contains the expected number of records (page_size),
+        there might be more pages.
+        """
+        # Parse response to check if there are more records
+        try:
+            response_data = response.json()
+            # Check if response is a list or dict with items
+            if isinstance(response_data, list):
+                records = response_data
+            elif isinstance(response_data, dict):
+                # Try common keys for records
+                records = response_data.get("@attributes", {}).get("count")
+                if records is None:
+                    # Try to get first list value
+                    for key, value in response_data.items():
+                        if isinstance(value, list):
+                            records = value
+                            break
+                if not isinstance(records, list):
+                    records = []
+            else:
+                records = []
+            
+            # If we got a full page, there might be more
+            if len(records) >= self.page_size:
+                previous_token = previous_token or 0
+                next_page_token = previous_token + self.page_size
+                return next_page_token
+        except Exception as e:
+            self.logger.debug(f"Error parsing pagination response: {e}")
+        
+        return None
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
     ) -> Dict[str, Any]:
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
-        params["limit"] = self.limit
+        
+        # Add pagination if we have a next page token
         if next_page_token:
-            params["page"] = next_page_token
-        start_date = self.get_starting_time(context)
+            params["offset"] = next_page_token
+            params["limit"] = self.page_size
+        
+        # Add replication key filtering if applicable
         if self.replication_key:
-            if start_date and self.replication_filter_field:
-                params[self.replication_filter_field] = start_date.astimezone(timezone('UTC')).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-            if self.end_date:
-                params[self.end_date_param] = self.end_date
+            start_date = self.get_starting_timestamp(context)
+            if start_date:
+                # Lightspeed R-Series uses updated_at_min for filtering
+                params["updated_at_min"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+        
         return params
 
-    def clean_values(self, row, field_meta = None):
-        for field, value in row.items():
-            # clean false values from non boolean fields
-            meta = (
-                self.schema["properties"].get(field, {})
-            )
-
-            if isinstance(value, list):
-                row[field] = [self.clean_values(val, meta) if isinstance(val, dict) else val for val in value]
-            elif isinstance(value, dict):
-                row[field] = self.clean_values(value, meta)
-            else:
-                if field_meta:
-                    meta = field_meta.get("properties").get(field, {}) if field_meta.get("properties") else field_meta.get("items", dict()).get("properties", dict()).get(field, dict())
-
-                field_type = meta.get("type", [""])[0]
-
-                if isinstance(value, str) and field_type == "number":
-                    row[field] = float(value) if value else None
-                
-                # Lightspeed API sometimes will return integer values as True or False.
-                # Absent any documentation on why, the tap converts them to None
-                if isinstance(value, bool) and field_type == "integer":
-                    row[field] = None
-
-                # Lightspeed sometimes returns nullish values as empty strings
-                if value == "" and field_type in ["integer", "number"]:
-                    row[field] = None
-
-                if field_type != "boolean" and value == False:
-                    row[field] = None
-        return row
-
-    def post_process(self, row, context):
-        row = self.clean_values(row)
-        return row
+    def make_request(self, context, next_page_token):
+        """Make a request to the API."""
+        prepared_request = self.prepare_request(
+            context, next_page_token=next_page_token
+        )
+        resp = self._request(prepared_request, context)
+        return resp
 
     def request_decorator(self, func: Callable) -> Callable:
+        """Create a decorator for request retry logic."""
         decorator: Callable = backoff.on_exception(
             backoff.expo,
             (
@@ -152,32 +136,42 @@ class LightspeedStream(RESTStream):
             factor=3,
         )(func)
         return decorator
-    
+
     def request_records(self, context: Optional[dict]) -> Iterable[dict]:
+        """Request records from the API with pagination."""
         next_page_token: Any = None
         finished = False
-        decorated_request = self.request_decorator(self._request)
-        throttle_seconds = self.config.get("throttle_seconds", 1.3)
+        decorated_request = self.request_decorator(self.make_request)
+        
+        # Throttle between requests to avoid rate limits
+        throttle_seconds = self.config.get("throttle_seconds", 1.0)
         try:
             throttle_seconds = float(throttle_seconds)
         except:
-            self.logger.info(f"Not able to convert {throttle_seconds} to a float, using throttle default value 1.3 seconds")
-            throttle_seconds = 1.3
+            self.logger.info(
+                f"Not able to convert {throttle_seconds} to a float, "
+                f"using throttle default value 1.0 seconds"
+            )
+            throttle_seconds = 1.0
 
         while not finished:
-            prepared_request = self.prepare_request(
-                context, next_page_token=next_page_token
-            )
             # Wait between requests to avoid hitting 429
-            self.logger.info(f"Waiting between requests to avoid rate limits for {throttle_seconds} seconds")
-            sleep(throttle_seconds)
+            if next_page_token is not None:
+                self.logger.debug(
+                    f"Waiting between requests to avoid rate limits "
+                    f"for {throttle_seconds} seconds"
+                )
+                sleep(throttle_seconds)
 
-            resp = decorated_request(prepared_request, context)
-            yield from self.parse_response(resp)
+            resp = decorated_request(context, next_page_token)
+            for row in self.parse_response(resp):
+                yield row
+            
             previous_token = copy.deepcopy(next_page_token)
             next_page_token = self.get_next_page_token(
                 response=resp, previous_token=previous_token
             )
+            
             if next_page_token and next_page_token == previous_token:
                 raise RuntimeError(
                     f"Loop detected in pagination. "
@@ -187,31 +181,49 @@ class LightspeedStream(RESTStream):
             finished = not next_page_token
 
     def validate_response(self, response: requests.Response) -> None:
+        """Validate the response and handle errors appropriately."""
         if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After")  
+            retry_after = response.headers.get("Retry-After")
             self.logger.info(f"Hit 429. Retry-After: {retry_after}")
 
             try:
-                retry_time = parse(retry_after)
-                retry_after = (retry_time - datetime.now(timezone("UTC"))).total_seconds()
-                retry_after = max(1, int(retry_after))  
-            except Exception:
-                retry_after = 60  # Fallback in case of parsing errors
+                # Try to parse Retry-After header
+                retry_after_seconds = int(retry_after)
+            except (ValueError, TypeError):
+                retry_after_seconds = 60  # Fallback in case of parsing errors
 
             msg = self.response_error_message(response)
-            self.logger.info(f"Response status code 429 too many requests, sleeping for {retry_after} seconds...")
-            sleep(retry_after)
+            self.logger.info(
+                f"Response status code 429 too many requests, "
+                f"sleeping for {retry_after_seconds} seconds..."
+            )
+            sleep(retry_after_seconds)
             self.logger.info("Trying request again...")
             raise TooManyRequestsError(msg, response)
-        
-        if response.status_code == 404 and 'Unknown or inactive language' in response.text:
-            raise FatalAPIError(f"Incorrect language specified in config: {self.config.get('language')}. Error: {response.text}")
 
-        if response.status_code in self.extra_retry_statuses or 500 <= response.status_code < 600:
-            msg = self.response_error_message(response)
+        # Handle authentication errors - token might need refresh
+        if response.status_code == 401:
+            msg = (
+                f"{response.status_code} Authentication Error: "
+                f"{response.reason} for path: {self.path} with response {response.text}"
+            )
+            # 401 might be retriable if token just expired
             raise RetriableAPIError(msg, response)
-        elif 400 <= response.status_code < 500:
-            msg = self.response_error_message(response)
+
+        # Handle server errors as retriable
+        if 500 <= response.status_code < 600:
+            msg = (
+                f"{response.status_code} Server Error: "
+                f"{response.reason} for path: {self.path} with response {response.text}"
+            )
+            raise RetriableAPIError(msg, response)
+
+        # Handle client errors as fatal (except 401 which is handled above)
+        if 400 <= response.status_code < 500:
+            msg = (
+                f"{response.status_code} Client Error: "
+                f"{response.reason} for path: {self.path} with response {response.text}"
+            )
             raise FatalAPIError(msg)
 
     def _write_state_message(self) -> None:
@@ -224,6 +236,7 @@ class LightspeedStream(RESTStream):
                     tap_state["bookmarks"][stream_name] = {"partitions": []}
 
         singer.write_message(StateMessage(value=tap_state))
-        
+
     def get_replication_key_signpost(self, context: Optional[dict]) -> Optional[Any]:
+        """Return the replication key signpost value if available."""
         return None
