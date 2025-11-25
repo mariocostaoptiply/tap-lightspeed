@@ -1,10 +1,10 @@
 version: 1
 send_anonymous_usage_stats: true
-project_id: tap-lightspeed
+project_id: tap-r-lightspeed
 plugins:
   extractors:
-  - name: tap-lightspeed
-    namespace: tap_lightspeed
+  - name: tap-r-lightspeed
+    namespace: tap_r-lightspeed
     pip_url: -e .
     capabilities:
     - state

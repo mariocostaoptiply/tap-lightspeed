@@ -1,0 +1,11 @@
+{
+    "domain_prefix": "mariooptiply",
+    "client_id": "uyGcZI1Ub1thuhiLmRKC3FAvWOLMd2l3",
+    "client_secret": "VYCM2AW4JtlBMqSLAdAHbsLZSWYgan6z",
+    "refresh_token": "lsxs_rt_Q3ulewmr0HdhWSdP5cf0GpssalT4vWqx",
+    "access_token": "lsxs_at_wgkaI3rHgF5LfaVf9hhQ6W0LLrvIOKE2",
+    "expires": 1764334602,
+    "expires_in": 259199,
+    "scope": "audit:read billing:partner_subscription:read billing:partner_subscription:write business_rules:read business_rules:write channels:read consignments:read consignments:write:inventory_count consignments:write:stock_order consignments:write:stock_transfer customers:read customers:write custom_fields:read custom_fields:write fulfillments:read fulfillments:write gift_cards:read gift_cards:write:issue gift_cards:write:redeem inventory:read outlets:read payments:read payment_types:read products:read products:read:price_books products:write products:write:price_books promotions:read promotions:write register:close register:open registers:read remote_rules:read remote_rules:write retailer:read sales:read sales:write serial_numbers:read serial_numbers:write services:read services:write store_credits:read store_credits:write:issue suppliers:read suppliers:write taxes:read taxes:write users:read users:write webhooks",
+    "token_type": "Bearer"
+}

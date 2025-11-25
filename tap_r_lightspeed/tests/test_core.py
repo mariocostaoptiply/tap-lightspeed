@@ -4,7 +4,7 @@ import datetime
 
 from singer_sdk.testing import get_standard_tap_tests
 
-from tap_lightspeed.tap import TapLightspeed
+from tap_r_lightspeed.tap import TapRLightspeed
 
 SAMPLE_CONFIG = {
     "start_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
@@ -15,7 +15,7 @@ SAMPLE_CONFIG = {
 # Run standard built-in tap tests from the SDK:
 def test_standard_tap_tests():
     """Run standard tap tests from the SDK."""
-    tests = get_standard_tap_tests(TapLightspeed, config=SAMPLE_CONFIG)
+    tests = get_standard_tap_tests(TapRLightspeed, config=SAMPLE_CONFIG)
     for test in tests:
         test()
 

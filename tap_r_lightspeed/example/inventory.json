@@ -1,0 +1,80 @@
+{
+    "data": [
+        {
+            "id": "5da87345-8f3b-614e-9e9d-2b013bc88983",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "39bc5492-4b1b-4d04-bfa7-c1df41f2e023",
+            "inventory_level": 0,
+            "current_amount": 0,
+            "version": 47538121342,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        },
+        {
+            "id": "584f8b39-9bff-5e36-5bac-64758a1f07d9",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "e0b2ad83-a555-4c76-b6ca-bb7d4cc3d827",
+            "inventory_level": 0,
+            "current_amount": 0,
+            "version": 47538121343,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        },
+        {
+            "id": "27ab522e-2104-2156-34a9-947f3f3248ac",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "ccbda3e1-fd16-4281-843f-220bdeeaa574",
+            "inventory_level": 0,
+            "current_amount": 0,
+            "version": 47538121344,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        },
+        {
+            "id": "3bdc7b75-6368-f71c-54ad-4f39e7f535c9",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "3d1b5c42-fe10-48b3-ace2-f4380a7f7f7e",
+            "inventory_level": 0,
+            "current_amount": 0,
+            "version": 47538121345,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        },
+        {
+            "id": "8e8674a8-f905-798d-a798-2328f6913472",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "f412a20b-9984-4ab7-ad40-9fdd99dc4054",
+            "inventory_level": 0,
+            "current_amount": 0,
+            "version": 47538121346,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        },
+        {
+            "id": "594ee1f3-acc6-b31b-f733-244d5a2a1c0b",
+            "outlet_id": "0698ab21-5f21-11f0-f6d9-c927a9fa4bff",
+            "product_id": "d413bc4a-b21d-4aa2-84d8-deafb3be5be2",
+            "inventory_level": 5,
+            "current_amount": 5,
+            "version": 47560283291,
+            "deleted_at": null,
+            "average_cost": null,
+            "reorder_point": null,
+            "reorder_amount": null
+        }
+    ],
+    "version": {
+        "min": 47538121342,
+        "max": 47560283291
+    }
+}

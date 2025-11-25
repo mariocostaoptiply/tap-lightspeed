@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "tap-lightspeed"
+name = "tap-r-lightspeed"
 version = "0.0.1"
-description = "`tap-lightspeed` is a Singer tap for Lightspeed, built with the Meltano SDK for Singer Taps."
+description = "`tap-r-lightspeed` is a Singer tap for Lightspeed r series, built with the Meltano SDK for Singer Taps."
 authors = ["Hotglue"]
 keywords = [
     "ELT",
@@ -36,4 +36,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 # CLI declaration
-tap-lightspeed = 'tap_lightspeed.tap:TapLightspeed.cli'
+tap-r-lightspeed = "tap_r_lightspeed.tap:TapRLightspeed.cli"

@@ -1,688 +1,693 @@
 """Stream type classes for tap-lightspeed."""
 
+from typing import Optional, Any, Dict, Iterable
+import requests
 from singer_sdk import typing as th
-
-from tap_lightspeed.client import LightspeedStream
-
-tax_rates = th.ObjectType(
-    th.Property("name", th.StringType),
-    th.Property("rate", th.NumberType),
-    th.Property("amount", th.NumberType),
-)
-
-resources = th.ObjectType(
-    th.Property(
-        "resource",
-        th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("url", th.StringType),
-            th.Property("link", th.StringType),
-        ),
-    )
-)
-
-option = th.ObjectType(
-    th.Property("sortOrder", th.IntegerType),
-    th.Property("id", th.IntegerType),
-    th.Property("name", th.StringType),  
-)
-
-country = th.ObjectType(
-    th.Property("id", th.IntegerType),
-    th.Property("code", th.StringType),
-    th.Property("code3", th.StringType),
-    th.Property("title", th.StringType),
-)
-
-class ShopStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "shop"
-    path = "/shop.json"
-    primary_keys = ["id"]
-    records_jsonpath = "$.shop"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("status", th.StringType),
-        th.Property("isB2b", th.BooleanType),
-        th.Property("isRetail", th.BooleanType),
-        th.Property("subDomain", th.StringType),
-        th.Property("mainDomain", th.StringType),
-        th.Property("email", th.StringType),
-        th.Property("phone", th.StringType),
-        th.Property("fax", th.StringType),
-        th.Property("street", th.StringType),
-        th.Property("street2", th.StringType),
-        th.Property("zipcode", th.StringType),
-        th.Property("city", th.StringType),
-        th.Property("region", th.StringType),
-        th.Property("country", country),
-        th.Property("vatNumber", th.StringType),
-        th.Property("cocNumber", th.StringType),
-        th.Property("industry", th.StringType),
-        th.Property("currency", th.ObjectType(
-            th.Property("shortcode", th.StringType),
-            th.Property("symbol", th.StringType),
-            th.Property("title", th.StringType),
-            th.Property("isDefault", th.BooleanType),
-            th.Property("currencyRate", th.StringType),
-        )),
-        th.Property("company", resources),
-        th.Property("limits", resources),
-        th.Property("javascript", resources),
-        th.Property("website", resources),
-        th.Property("scripts", resources),
-        th.Property("metafields", resources),
-    ).to_dict()
+from tap_r_lightspeed.client import LightspeedXSeriesStream
 
 
-class OrdersStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "orders"
-    path = "/orders.json"
-    primary_keys = ["id"]
-    records_jsonpath = "$.orders[*]"
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("number", th.StringType),
-        th.Property("status", th.StringType),
-        th.Property("customStatusId", th.IntegerType),
-        th.Property("channel", th.StringType),
-        th.Property("remoteIp", th.StringType),
-        th.Property("userAgent", th.StringType),
-        th.Property("referralId", th.StringType),
-        th.Property("priceCost", th.NumberType),
-        th.Property("priceExcl", th.NumberType),
-        th.Property("priceIncl", th.NumberType),
-        th.Property("weight", th.NumberType),
-        th.Property("volume", th.NumberType),
-        th.Property("colli", th.NumberType),
-        th.Property("gender", th.StringType),
-        th.Property("birthDate", th.DateTimeType),
-        th.Property("nationalId", th.StringType),
-        th.Property("email", th.StringType),
-        th.Property("firstname", th.StringType),
-        th.Property("middlename", th.StringType),
-        th.Property("lastname", th.StringType),
-        th.Property("phone", th.StringType),
-        th.Property("mobile", th.StringType),
-        th.Property("isCompany", th.BooleanType),
-        th.Property("companyName", th.StringType),
-        th.Property("companyCoCNumber", th.StringType),
-        th.Property("companyVatNumber", th.StringType),
-        th.Property("addressBillingName", th.StringType),
-        th.Property("addressBillingStreet", th.StringType),
-        th.Property("addressBillingStreet2", th.StringType),
-        th.Property("addressBillingNumber", th.StringType),
-        th.Property("addressBillingExtension", th.StringType),
-        th.Property("addressBillingZipcode", th.StringType),
-        th.Property("addressBillingCity", th.StringType),
-        th.Property("addressBillingRegion", th.StringType),
-        th.Property("addressBillingCountry", country),
-        th.Property("addressShippingCompany", th.StringType),
-        th.Property("addressShippingName", th.StringType),
-        th.Property("addressShippingStreet", th.StringType),
-        th.Property("addressShippingStreet2", th.StringType),
-        th.Property("addressShippingNumber", th.BooleanType),
-        th.Property("addressShippingExtension", th.StringType),
-        th.Property("addressShippingZipcode", th.StringType),
-        th.Property("addressShippingCity", th.StringType),
-        th.Property("addressShippingRegion", th.StringType),
-        th.Property("addressShippingCountry", country),
-        th.Property("paymentId", th.StringType),
-        th.Property("paymentStatus", th.StringType),
-        th.Property("paymentIsPost", th.BooleanType),
-        th.Property("paymentIsInvoiceExternal", th.BooleanType),
-        th.Property("paymentTaxRate", th.NumberType),
-        th.Property("paymentTaxRates", th.ArrayType(tax_rates)),
-        th.Property("paymentBasePriceExcl", th.NumberType),
-        th.Property("paymentBasePriceIncl", th.NumberType),
-        th.Property("paymentPriceExcl", th.NumberType),
-        th.Property("paymentPriceIncl", th.NumberType),
-        th.Property("paymentTitle", th.StringType),
-        th.Property("paymentData", th.CustomType({"type": ["object", "string", "array"]})),
-        th.Property("shipmentId", th.StringType),
-        th.Property("shipmentStatus", th.StringType),
-        th.Property("shipmentIsCashOnDelivery", th.BooleanType),
-        th.Property("shipmentIsPickup", th.BooleanType),
-        th.Property("shipmentTaxRate", th.NumberType),
-        th.Property("shipmentTaxRates", th.ArrayType(tax_rates)),
-        th.Property("shipmentBasePriceExcl", th.NumberType),
-        th.Property("shipmentBasePriceIncl", th.NumberType),
-        th.Property("shipmentPriceExcl", th.NumberType),
-        th.Property("shipmentPriceIncl", th.NumberType),
-        th.Property("shipmentDiscountExcl", th.NumberType),
-        th.Property("shipmentDiscountIncl", th.NumberType),
-        th.Property("shipmentTitle", th.StringType),
-        th.Property("shipmentData", th.CustomType({"type": ["object", "string", "array"]})),
-        th.Property("shippingDate", th.DateTimeType),
-        th.Property("taxRates", th.ArrayType(tax_rates)),
-        th.Property("deliveryDate", th.DateTimeType),
-        th.Property("isDiscounted", th.BooleanType),
-        th.Property("discountType", th.StringType),
-        th.Property("discountAmount", th.NumberType),
-        th.Property("discountPercentage", th.NumberType),
-        th.Property("discountCouponCode", th.StringType),
-        th.Property("isNewCustomer", th.BooleanType),
-        th.Property("comment", th.StringType),
-        th.Property("memo", th.StringType),
-        th.Property("doNotifyNew", th.BooleanType),
-        th.Property("doNotifyReminder", th.BooleanType),
-        th.Property("doNotifyCancelled", th.BooleanType),
-        th.Property(
-            "language",
-            th.ObjectType(
-                th.Property("locale", th.StringType),
-                th.Property("id", th.IntegerType),
-                th.Property("code", th.StringType),
-                th.Property("title", th.StringType),
-            ),
-        ),
-        th.Property("customer", resources),
-        th.Property("invoices", resources),
-        th.Property("shipments", resources),
-        th.Property("products", resources),
-        th.Property("metafields", resources),
-        th.Property("quote", resources),
-        th.Property("events", resources),
-    ).to_dict()
-
-    def get_child_context(self, record, context) -> dict:
-        return {"order_id": record["id"]}
-
-
-class OrderLinesStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "order_lines"
-    path = "/orders/{order_id}/products.json"
-    primary_keys = ["id"]
-    parent_stream_type = OrdersStream
-    records_jsonpath = "$.orderProducts[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("supplierTitle", th.StringType),
-        th.Property("brandTitle", th.StringType),
-        th.Property("productTitle", th.StringType),
-        th.Property("variantTitle", th.StringType),
-        th.Property("taxRate", th.NumberType),
-        th.Property("quantityOrdered", th.IntegerType),
-        th.Property("quantityInvoiced", th.IntegerType),
-        th.Property("quantityShipped", th.IntegerType),
-        th.Property("quantityRefunded", th.IntegerType),
-        th.Property("quantityReturned", th.IntegerType),
-        th.Property("articleCode", th.StringType),
-        th.Property("ean", th.StringType),
-        th.Property("sku", th.StringType),
-        th.Property("weight", th.NumberType),
-        th.Property("volume", th.NumberType),
-        th.Property("colli", th.NumberType),
-        th.Property("sizeX", th.IntegerType),
-        th.Property("sizeY", th.IntegerType),
-        th.Property("sizeZ", th.IntegerType),
-        th.Property("priceCost", th.NumberType),
-        th.Property("customExcl", th.NumberType),
-        th.Property("customIncl", th.NumberType),
-        th.Property("basePriceExcl", th.NumberType),
-        th.Property("basePriceIncl", th.NumberType),
-        th.Property("priceExcl", th.NumberType),
-        th.Property("priceIncl", th.NumberType),
-        th.Property("discountExcl", th.NumberType),
-        th.Property("discountIncl", th.NumberType),
-        th.Property("customFields", th.CustomType({"type": ["array","object", "string"]})),
-        th.Property("order_id", th.IntegerType),
-        th.Property("product", resources),
-        th.Property("variant", resources),
-    ).to_dict()
-
-
-class OrderMetafieldsStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "order_metafields"
-    path = "/orders/{order_id}/metafields.json"
-    parent_stream_type = OrdersStream
-    records_jsonpath = "$.orderMetafields[*]"
-
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("key", th.StringType),
-        th.Property("value", th.StringType),
-        th.Property("order_id", th.IntegerType),
-    ).to_dict()
-
-
-class ShipmentsLinesStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "order_shipping_lines"
-    path = "/shipments.json"
-    primary_keys = ["id"]
-    parent_stream_type = OrdersStream
-    records_jsonpath = "$.shipments[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("number", th.StringType),
-        th.Property("status", th.StringType),
-        th.Property("trackingCode", th.StringType),
-        th.Property("doNotifyShipped", th.BooleanType),
-        th.Property("doNotifyReadyForPickup", th.BooleanType),
-        th.Property("doNotifyTrackingCode", th.BooleanType),
-        th.Property("totalWeight", th.IntegerType),
-        th.Property("totalSizeX", th.IntegerType),
-        th.Property("totalSizeY", th.IntegerType),
-        th.Property("totalSizeZ", th.IntegerType),
-        th.Property("order_id", th.IntegerType),
-        th.Property("customer", resources),
-        th.Property("order", resources),
-        th.Property("products", resources),
-        th.Property("metafields", resources),
-        th.Property("events", resources),
-    ).to_dict()
-
-    def get_url_params(self, context, next_page_token):
-        params = {"order": context.get("order_id")}
-        params.update(super().get_url_params(context, next_page_token))
-        return params
-
-
-class ProductsStream(LightspeedStream):
-    """Define custom stream."""
-
+class ProductsStream(LightspeedXSeriesStream):
+    """Products stream for Lightspeed X-Series API.
+    
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters products with version > after (similar to lastModifiedDate in Dynamics).
+    """
+    
     name = "products"
-    path = "/products.json"
+    path = "/api/2.0/products"
     primary_keys = ["id"]
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-    records_jsonpath = "$.products[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("isVisible", th.BooleanType),
-        th.Property("visibility", th.StringType),
-        th.Property("data01", th.StringType),
-        th.Property("data02", th.StringType),
-        th.Property("data03", th.StringType),
-        th.Property("url", th.StringType),
-        th.Property("title", th.StringType),
-        th.Property("fulltitle", th.StringType),
-        th.Property("description", th.StringType),
-        th.Property("content", th.StringType),
-        th.Property("set", th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("createdAt", th.DateTimeType),
-            th.Property("updatedAt", th.DateTimeType),
-            th.Property("options", th.ArrayType(th.ObjectType(
-                th.Property("id", th.IntegerType),
-                th.Property("sortOrder", th.IntegerType),
-                th.Property("name", th.StringType),
-                th.Property("values", th.ArrayType(th.ObjectType(
-                    th.Property("id", th.IntegerType),
-                    th.Property("sortOrder", th.IntegerType),
-                    th.Property("name", th.StringType)
-                )))
-            )))
-        )),
-        th.Property("brand", resources),
-        th.Property("categories", resources),
-        th.Property("deliverydate", resources),
-        th.Property("image", th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("createdAt", th.DateTimeType),
-            th.Property("updatedAt", th.DateTimeType),
-            th.Property("type", th.StringType),
-            th.Property("extension", th.StringType),
-            th.Property("size", th.IntegerType),
-            th.Property("title", th.StringType),
-            th.Property("src", th.StringType),
-        )),
-        th.Property("images", resources),
-        th.Property("relations", resources),
-        th.Property("metafields", resources),
-        th.Property("reviews", resources),
-        th.Property("type", resources),
-        th.Property("attributes", resources),
-        th.Property("supplier", resources),
-        th.Property("tags", resources),
-        th.Property("variants", resources),
-        th.Property("movements", resources),
-    ).to_dict()
-
-    def get_child_context(self, record: dict, context) -> dict:
-        return {"product_id": record["id"]}
-
-class VariantsStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "variants"
-    path = "/variants.json"
-    primary_keys = ["id"]
-    records_jsonpath = "$.variants[*]"
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
+    replication_key = "version"
+    records_jsonpath = "$.data[*]"  # Extract products from data array
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
     
     schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("isDefault", th.BooleanType),
-        th.Property("sortOrder", th.IntegerType),
-        th.Property("articleCode", th.StringType),
-        th.Property("ean", th.StringType),
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        th.Property("version", th.IntegerType),
+        th.Property("source_id", th.StringType),
+        th.Property("source_variant_id", th.StringType),
+        th.Property("variant_parent_id", th.StringType),
+        th.Property("family_id", th.StringType),
+        
+        # Basic product information
+        th.Property("name", th.StringType),
+        th.Property("variant_name", th.StringType),
+        th.Property("handle", th.StringType),
         th.Property("sku", th.StringType),
-        th.Property("hs", th.StringType),
-        th.Property("unitPrice", th.NumberType),
-        th.Property("unitUnit", th.StringType),
-        th.Property("priceExcl", th.NumberType),
-        th.Property("priceIncl", th.NumberType),
-        th.Property("priceCost", th.NumberType),
-        th.Property("oldPriceExcl", th.NumberType),
-        th.Property("oldPriceIncl", th.NumberType),
-        th.Property("stockTracking", th.StringType),  
-        th.Property("stockLevel", th.NumberType),
-        th.Property("stockAlert", th.NumberType),
-        th.Property("stockMinimum", th.NumberType),
-        th.Property("stockSold", th.NumberType),
-        th.Property("stockBuyMininum", th.NumberType),
-        th.Property("stockBuyMaximum", th.NumberType),
-        th.Property("weight", th.NumberType),
-        th.Property("weightValue", th.StringType),
-        th.Property("weightUnit", th.StringType),
-        th.Property("volume", th.NumberType),
-        th.Property("volumeValue", th.NumberType),
-        th.Property("volumeUnit", th.StringType),  
-        th.Property("colli", th.NumberType),
-        th.Property("sizeX", th.NumberType),
-        th.Property("sizeY", th.NumberType),
-        th.Property("sizeZ", th.NumberType),
-        th.Property("sizeXValue", th.StringType),
-        th.Property("sizeYValue", th.StringType),
-        th.Property("sizeZValue", th.StringType),
-        th.Property("sizeUnit", th.StringType),
-        th.Property("matrix", th.StringType),
-        th.Property("title", th.StringType),  
-        th.Property("taxType", th.StringType),
-        th.Property("image", th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("createdAt", th.DateTimeType),
-            th.Property("updatedAt", th.DateTimeType),
-            th.Property("type", th.StringType),
-            th.Property("extension", th.StringType),
-            th.Property("size", th.IntegerType),
-            th.Property("title", th.StringType),
-            th.Property("src", th.StringType),
+        th.Property("supplier_code", th.StringType),
+        th.Property("description", th.StringType),
+        th.Property("type", th.StringType),
+        
+        # Status flags
+        th.Property("active", th.BooleanType),
+        th.Property("is_active", th.BooleanType),
+        th.Property("has_inventory", th.BooleanType),
+        th.Property("is_composite", th.BooleanType),
+        th.Property("ecwid_enabled_webstore", th.BooleanType),
+        th.Property("has_variants", th.BooleanType),
+        
+        # Images
+        th.Property("image_url", th.StringType),
+        th.Property("image_thumbnail_url", th.StringType),
+        
+        # Timestamps
+        th.Property("created_at", th.DateTimeType),
+        th.Property("updated_at", th.DateTimeType),
+        th.Property("deleted_at", th.DateTimeType),
+        
+        # Source and accounting
+        th.Property("source", th.StringType),
+        th.Property("account_code", th.StringType),
+        th.Property("account_code_purchase", th.StringType),
+        th.Property("supply_price", th.NumberType),
+        
+        # Relationships
+        th.Property("supplier_id", th.StringType),
+        th.Property("brand_id", th.StringType),
+        th.Property("product_type_id", th.StringType),
+        th.Property("product_category", th.StringType),
+        # supplier and brand can be objects (with id, name, description, etc.) or null
+        th.Property("supplier", th.ObjectType(
+            th.Property("id", th.StringType),
+            th.Property("name", th.StringType),
+            th.Property("source", th.StringType),
+            th.Property("description", th.StringType),
+            th.Property("deleted_at", th.DateTimeType),
+            th.Property("version", th.IntegerType),
         )),
-        th.Property("additionalcost", th.BooleanType),
-        th.Property("options", th.ArrayType(
+        th.Property("brand", th.ObjectType(
+            th.Property("id", th.StringType),
+            th.Property("name", th.StringType),
+            th.Property("source", th.StringType),
+            th.Property("description", th.StringType),
+            th.Property("deleted_at", th.DateTimeType),
+            th.Property("version", th.IntegerType),
+        )),
+        
+        # Variants
+        th.Property("variant_count", th.IntegerType),
+        # variant_options: per API docs has name and value, but API may also return id
+        th.Property("variant_options", th.ArrayType(
             th.ObjectType(
-                th.Property("values", th.ArrayType(option)),
-                th.Property("sortOrder", th.IntegerType),
-                th.Property("id", th.IntegerType),
-                th.Property("value", option),  
-                th.Property("createdAt", th.DateTimeType),
-                th.Property("updatedAt", th.DateTimeType),
-                th.Property("name", th.StringType),
+                th.Property("name", th.StringType),  # required per API docs
+                th.Property("value", th.StringType),  # required per API docs
+                th.Property("id", th.StringType),  # not in docs but may be returned by API
             )
         )),
-        th.Property("product_id", th.IntegerType),
-        th.Property("tax", resources),
-        th.Property("product", resources),
-    ).to_dict()
-    
-    def post_process(self, record, context):
-        super().post_process(record, context)
-        if record and isinstance(record, dict) and "product" in record:
-            product = record.get("product", {})
-            if isinstance(product, dict):
-                resource = product.get("resource", {})
-                if isinstance(resource, dict):
-                    record["product_id"] = resource.get("id")
-        return record
-
-class ProductsImagesStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "products_images"
-    path = "/products/{product_id}/images.json"
-    primary_keys = ["id"]
-    parent_stream_type = ProductsStream
-    records_jsonpath = "$.productImages[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("sortOrder", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("extension", th.StringType),
-        th.Property("size", th.IntegerType),
-        th.Property("title", th.StringType),
-        th.Property("thumb", th.StringType),
-        th.Property("src", th.StringType),
-        th.Property("product_id", th.IntegerType),
-    ).to_dict()
-
-
-class ProductsMetafieldsStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "products_metafields"
-    path = "/products/{product_id}/metafields.json"
-    parent_stream_type = ProductsStream
-    records_jsonpath = "$.productMetafields[*]"
-
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("key", th.StringType),
-        th.Property("value", th.StringType),
-        th.Property("product_id", th.IntegerType),
-    ).to_dict()
-    
-    def post_process(self, record, context):
-        super().post_process(record, context)
-
-        """Ensure value is always a string."""
-        record["value"] = str(record["value"]) if record.get("value") is not None else ""
-        return record
-
-class CategoriesStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "categories"
-    path = "/categories.json"
-    primary_keys = ["id"]
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-    records_jsonpath = "$.categories[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("isVisible", th.BooleanType),
-        th.Property("depth", th.IntegerType),
-        th.Property("path", th.ArrayType(th.StringType)),
-        th.Property("type", th.StringType),
-        th.Property("sortOrder", th.IntegerType),
-        th.Property("sorting", th.StringType),
-        th.Property("url", th.StringType),
-        th.Property("title", th.StringType),
-        th.Property("fulltitle", th.StringType),
-        th.Property("description", th.StringType),
-        th.Property("content", th.StringType),
-        th.Property("image", th.ObjectType(
-            th.Property("id", th.IntegerType),
-            th.Property("createdAt", th.DateTimeType),
-            th.Property("updatedAt", th.DateTimeType),
-            th.Property("type", th.StringType),
-            th.Property("extension", th.StringType),
-            th.Property("size", th.IntegerType),
-            th.Property("title", th.StringType),
-            th.Property("src", th.StringType),
+        
+        # Categories and tags
+        # Categories: array of tag objects (per API docs: id, name, deleted_at)
+        # Note: API also returns 'version' field, so we include it for completeness
+        th.Property("categories", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("name", th.StringType),  # required per API docs
+                th.Property("deleted_at", th.DateTimeType),
+                th.Property("version", th.IntegerType),  # not in docs but returned by API
+            )
         )),
-        th.Property("parent", resources),
-        th.Property("children", resources),
-        th.Property("products", resources),
+        th.Property("tag_ids", th.ArrayType(th.StringType)),
+        
+        # Images arrays
+        # images: per API docs has id, url, version
+        th.Property("images", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("url", th.StringType),
+                th.Property("version", th.IntegerType),
+            )
+        )),
+        # skuImages: not in API docs but may be returned by API
+        th.Property("skuImages", th.ArrayType(th.ObjectType())),
+        
+        # Pricing
+        th.Property("price_including_tax", th.NumberType),
+        th.Property("price_excluding_tax", th.NumberType),
+        th.Property("loyalty_amount", th.NumberType),
+        
+        # Product codes
+        # product_codes: per API docs has type (enum: CUSTOM, EAN, ISBN, ITF, JAN, UPC) and code
+        th.Property("product_codes", th.ArrayType(
+            th.ObjectType(
+                th.Property("type", th.StringType),  # enum: CUSTOM, EAN, ISBN, ITF, JAN, UPC
+                th.Property("code", th.StringType),  # required per API docs
+                th.Property("id", th.StringType),  # not in docs but may be returned by API
+            )
+        )),
+        
+        # Product suppliers
+        # product_suppliers: per API docs has supplier_id, price, code
+        th.Property("product_suppliers", th.ArrayType(
+            th.ObjectType(
+                th.Property("supplier_id", th.StringType),  # required per API docs
+                th.Property("price", th.NumberType),  # required per API docs (double)
+                th.Property("code", th.StringType),  # required per API docs
+                # Additional fields that may be returned by API:
+                th.Property("id", th.StringType),
+                th.Property("product_id", th.StringType),
+                th.Property("supplier_name", th.StringType),
+            )
+        )),
+        
+        # Packaging
+        th.Property("packaging", th.ObjectType(
+            th.Property("made_from", th.ArrayType(th.StringType)),
+            th.Property("breaks_into", th.ArrayType(th.StringType)),
+        )),
+        
+        # Physical attributes
+        th.Property("weight", th.NumberType),
+        th.Property("weight_unit", th.StringType),
+        th.Property("length", th.NumberType),
+        th.Property("width", th.NumberType),
+        th.Property("height", th.NumberType),
+        th.Property("dimensions_unit", th.StringType),
+        
+        # Other attributes
+        # attributes: per API docs has key and value
+        th.Property("attributes", th.ArrayType(
+            th.ObjectType(
+                th.Property("key", th.StringType),  # required per API docs
+                th.Property("value", th.StringType),  # required per API docs
+            )
+        )),
+        th.Property("button_order", th.IntegerType),
     ).to_dict()
+    
+    def get_optional_params(self) -> list:
+        """Return a list of optional parameter names specific to products stream."""
+        return [
+            "deleted",  # Boolean to include deleted products
+            "active",   # Filter by active status
+            "type",     # Filter by product type
+            "supplier_id",  # Filter by supplier
+            "brand_id",     # Filter by brand
+            "product_type_id",  # Filter by product type
+        ]
 
 
-class CategoriesProductStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "categories_product"
-    path = "/categories/products.json"
+class InventoryStream(LightspeedXSeriesStream):
+    """Inventory stream for Lightspeed X-Series API.
+    
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters inventory records with version > after.
+    Requires: inventory:read scope
+    """
+    
+    name = "inventory"
+    path = "/api/2.0/inventory"
     primary_keys = ["id"]
-    records_jsonpath = "$.categoriesProducts[*]"
-    parent_stream_type = ProductsStream
+    replication_key = "version"
+    records_jsonpath = "$.data[*]"  # Extract inventory records from data array
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
+    
     schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("sortOrder", th.IntegerType),
-        th.Property("product_id", th.IntegerType),
-        th.Property("category", resources),
-        th.Property("product", resources),
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        th.Property("version", th.IntegerType),
+        
+        # Relationships
+        th.Property("outlet_id", th.StringType),
+        th.Property("product_id", th.StringType),
+        
+        # Inventory levels
+        th.Property("inventory_level", th.NumberType),
+        th.Property("current_amount", th.NumberType),
+        
+        # Cost and reorder settings
+        th.Property("average_cost", th.NumberType),
+        th.Property("reorder_point", th.NumberType),
+        th.Property("reorder_amount", th.NumberType),
+        
+        # Timestamps
+        th.Property("deleted_at", th.DateTimeType),
+    ).to_dict()
+    
+    def get_optional_params(self) -> list:
+        """Return a list of optional parameter names specific to inventory stream."""
+        return [
+            "outlet_id",  # Filter by outlet
+            "product_id",  # Filter by product
+            "before",  # Upper limit for version numbers
+        ]
+
+
+class SuppliersStream(LightspeedXSeriesStream):
+    """Suppliers stream for Lightspeed X-Series API.
+    
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters suppliers with version > after.
+    Requires: suppliers:read scope
+    """
+    
+    name = "suppliers"
+    path = "/api/2.0/suppliers"
+    primary_keys = ["id"]
+    replication_key = "version"
+    records_jsonpath = "$.data[*]"  # Extract suppliers from data array
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
+    
+    schema = th.PropertiesList(
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        th.Property("version", th.IntegerType),
+        
+        # Basic supplier information
+        th.Property("name", th.StringType),
+        th.Property("source", th.StringType),
+        th.Property("description", th.StringType),
+        th.Property("default_markup", th.NumberType),
+        
+        # Timestamps
+        th.Property("deleted_at", th.DateTimeType),
+        
+        # Contact information (nested object)
+        th.Property("contact", th.ObjectType(
+            # Personal information
+            th.Property("first_name", th.StringType),
+            th.Property("last_name", th.StringType),
+            th.Property("company_name", th.StringType),
+            
+            # Contact methods
+            th.Property("phone", th.StringType),
+            th.Property("mobile", th.StringType),
+            th.Property("fax", th.StringType),
+            th.Property("website", th.StringType),
+            th.Property("email", th.StringType),
+            th.Property("twitter", th.StringType),
+            
+            # Postal address
+            th.Property("postal_address1", th.StringType),
+            th.Property("postal_address2", th.StringType),
+            th.Property("postal_suburb", th.StringType),
+            th.Property("postal_postcode", th.StringType),
+            th.Property("postal_city", th.StringType),
+            th.Property("postal_state", th.StringType),
+            th.Property("postal_country_id", th.StringType),
+            
+            # Physical address
+            th.Property("physical_address1", th.StringType),
+            th.Property("physical_address2", th.StringType),
+            th.Property("physical_suburb", th.StringType),
+            th.Property("physical_postcode", th.StringType),
+            th.Property("physical_city", th.StringType),
+            th.Property("physical_state", th.StringType),
+            th.Property("physical_country_id", th.StringType),
+        )),
+    ).to_dict()
+    
+class SalesStream(LightspeedXSeriesStream):
+    """Sales stream for Lightspeed X-Series API.
+    
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters sales with version > after.
+    Requires: sales:read scope
+    """
+    
+    name = "sales"
+    path = "/api/2.0/sales"
+    primary_keys = ["id"]
+    replication_key = "version"
+    records_jsonpath = "$.data[*]"  # Extract sales from data array
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
+    
+    schema = th.PropertiesList(
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        th.Property("version", th.IntegerType),
+        
+        # Relationships
+        th.Property("outlet_id", th.StringType),
+        th.Property("register_id", th.StringType),
+        th.Property("user_id", th.StringType),
+        th.Property("customer_id", th.StringType),
+        
+        # Sale information
+        th.Property("invoice_number", th.StringType),
+        th.Property("invoice_sequence", th.NumberType),
+        th.Property("receipt_number", th.StringType),
+        th.Property("source", th.StringType),  # USER, SHOPIFY, ECOMMERCE, QUOTE
+        th.Property("source_id", th.StringType),
+        th.Property("status", th.StringType),  # SAVED, CLOSED, ONACCOUNT, etc.
+        th.Property("state", th.StringType),  # parked, pending, voided, closed
+        th.Property("note", th.StringType),
+        th.Property("short_code", th.StringType),
+        th.Property("return_for", th.StringType),
+        th.Property("return_ids", th.ArrayType(th.StringType)),
+        
+        # Financial totals
+        th.Property("total_price", th.NumberType),
+        th.Property("total_price_incl", th.NumberType),
+        th.Property("total_tax", th.NumberType),
+        th.Property("total_loyalty", th.NumberType),
+        th.Property("total_surcharge", th.NumberType),
+        
+        # Timestamps
+        th.Property("sale_date", th.DateTimeType),
+        th.Property("created_at", th.DateTimeType),
+        th.Property("updated_at", th.DateTimeType),
+        th.Property("deleted_at", th.DateTimeType),
+        
+        # Additional fields
+        th.Property("complete_open_sequence_id", th.StringType),
+        th.Property("accounts_transaction_id", th.StringType),
+        th.Property("has_unsynced_on_account_payments", th.BooleanType),
+        
+        # Line items (array of objects)
+        th.Property("line_items", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("product_id", th.StringType),
+                th.Property("salesperson_id", th.StringType),
+                th.Property("tax_id", th.StringType),
+                th.Property("quantity", th.NumberType),
+                th.Property("price", th.NumberType),
+                th.Property("price_total", th.NumberType),
+                th.Property("unit_price", th.NumberType),
+                th.Property("discount", th.NumberType),
+                th.Property("discount_total", th.NumberType),
+                th.Property("unit_discount", th.NumberType),
+                th.Property("total_discount", th.NumberType),
+                th.Property("tax", th.NumberType),  # deprecated
+                th.Property("tax_total", th.NumberType),
+                th.Property("unit_tax", th.NumberType),
+                th.Property("total_tax", th.NumberType),
+                th.Property("total_price", th.NumberType),
+                th.Property("cost", th.NumberType),
+                th.Property("cost_total", th.NumberType),
+                th.Property("loyalty_value", th.NumberType),
+                th.Property("note", th.StringType),
+                th.Property("return_reason", th.StringType),
+                th.Property("status", th.StringType),  # SAVED, VOIDED, CONFIRMED
+                th.Property("sequence", th.IntegerType),
+                th.Property("price_set", th.BooleanType),
+                th.Property("is_return", th.BooleanType),
+                th.Property("gift_card_number", th.StringType),
+                th.Property("tax_components", th.ArrayType(
+                    th.ObjectType(
+                        th.Property("rate_id", th.StringType),
+                        th.Property("total_tax", th.NumberType),
+                    )
+                )),
+                th.Property("promotions", th.ArrayType(th.ObjectType())),
+                th.Property("surcharges", th.ArrayType(
+                    th.ObjectType(
+                        th.Property("value", th.NumberType),
+                        th.Property("tax_components", th.ArrayType(
+                            th.ObjectType(
+                                th.Property("rate_id", th.StringType),
+                                th.Property("total_tax", th.NumberType),
+                            )
+                        )),
+                    )
+                )),
+            )
+        )),
+        
+        # Payments (array of objects)
+        th.Property("payments", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("register_id", th.StringType),
+                th.Property("register_open_sequence_id", th.StringType),
+                th.Property("outlet_id", th.StringType),
+                th.Property("retailer_payment_type_id", th.StringType),
+                th.Property("payment_type_id", th.StringType),
+                th.Property("name", th.StringType),
+                th.Property("amount", th.NumberType),
+                th.Property("payment_date", th.DateTimeType),
+                th.Property("deleted_at", th.DateTimeType),
+                th.Property("surcharge", th.ObjectType()),
+                th.Property("source_id", th.StringType),
+                th.Property("external_attributes", th.ArrayType(th.ObjectType())),
+                th.Property("external_applications", th.ArrayType(th.ObjectType())),
+            )
+        )),
+        
+        # Taxes (array of objects)
+        th.Property("taxes", th.ArrayType(
+            th.ObjectType(
+                th.Property("id", th.StringType),
+                th.Property("amount", th.NumberType),
+                th.Property("name", th.StringType),
+                th.Property("rate", th.NumberType),
+            )
+        )),
+        
+        # Adjustments (array of objects)
+        th.Property("adjustments", th.ArrayType(
+            th.ObjectType(
+                th.Property("name", th.StringType),
+                th.Property("value", th.NumberType),
+                th.Property("adjustment_type", th.StringType),  # NON_CASH_FEE, DISCOUNT, TIP, SURCHARGE, ECOM_CUSTOM_CHARGE
+                th.Property("tax_components", th.ArrayType(
+                    th.ObjectType(
+                        th.Property("rate_id", th.StringType),
+                        th.Property("total_tax", th.NumberType),
+                    )
+                )),
+            )
+        )),
+        
+        # Ecom custom charges (object)
+        th.Property("ecom_custom_charges", th.ObjectType(
+            th.Property("charges", th.ArrayType(th.ObjectType())),
+            th.Property("total", th.NumberType),
+            th.Property("total_tax", th.NumberType),
+            th.Property("total_incl", th.NumberType),
+        )),
+        
+        # Attributes (array of strings)
+        th.Property("attributes", th.ArrayType(th.StringType)),
+        th.Property("external_applications", th.ArrayType(th.ObjectType())),
     ).to_dict()
 
-    def get_url_params(self, context, next_page_token):
-        params = {"product": context.get("product_id")}
-        params.update(super().get_url_params(context, next_page_token))
+
+class OutletsStream(LightspeedXSeriesStream):
+    """Outlets stream for Lightspeed X-Series API.
+    
+    Note: This endpoint (/api/outlets) is deprecated but still functional.
+    It uses traditional pagination (page-based) instead of version-based pagination.
+    The response structure uses 'outlets' array and 'pagination' object instead of 'data' and 'version'.
+    
+    Requires: outlets:read scope
+    """
+    
+    name = "outlets"
+    path = "/api/outlets"
+    primary_keys = ["id"]
+    replication_key = None  # This endpoint doesn't support incremental sync via version
+    records_jsonpath = "$.outlets[*]"  # Extract outlets from outlets array (not data)
+    page_size = 200  # Default page size
+    
+    schema = th.PropertiesList(
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        
+        # Basic outlet information
+        th.Property("name", th.StringType),
+        th.Property("time_zone", th.StringType),  # tz database format like Pacific/Auckland
+        th.Property("tax_id", th.StringType),
+        th.Property("email", th.StringType),
+        
+        # Contact information (nested object)
+        th.Property("contact", th.ObjectType(
+            # Personal information
+            th.Property("first_name", th.StringType),
+            th.Property("last_name", th.StringType),
+            th.Property("company_name", th.StringType),
+            
+            # Contact methods
+            th.Property("phone", th.StringType),
+            th.Property("mobile", th.StringType),
+            th.Property("fax", th.StringType),
+            th.Property("email", th.StringType),
+            th.Property("twitter", th.StringType),
+            th.Property("website", th.StringType),
+            
+            # Physical address
+            th.Property("physical_address1", th.StringType),
+            th.Property("physical_address2", th.StringType),
+            th.Property("physical_suburb", th.StringType),
+            th.Property("physical_city", th.StringType),
+            th.Property("physical_postcode", th.StringType),
+            th.Property("physical_state", th.StringType),
+            th.Property("physical_country_id", th.StringType),
+            
+            # Postal address
+            th.Property("postal_address1", th.StringType),
+            th.Property("postal_address2", th.StringType),
+            th.Property("postal_suburb", th.StringType),
+            th.Property("postal_city", th.StringType),
+            th.Property("postal_postcode", th.StringType),
+            th.Property("postal_state", th.StringType),
+            th.Property("postal_country_id", th.StringType),
+        )),
+        
+        # Physical address fields (also at top level, per example)
+        th.Property("physical_address1", th.StringType),
+        th.Property("physical_address2", th.StringType),
+        th.Property("physical_suburb", th.StringType),
+        th.Property("physical_city", th.StringType),
+        th.Property("physical_postcode", th.StringType),
+        th.Property("physical_state", th.StringType),
+        th.Property("physical_country_id", th.StringType),
+    ).to_dict()
+    
+    def get_next_page_token(
+        self, response: requests.Response, previous_token: Optional[Any]
+    ) -> Optional[Any]:
+        """Return the next page token using traditional pagination.
+        
+        This endpoint uses page-based pagination instead of version-based.
+        The response contains:
+        {
+            "outlets": [...],
+            "pagination": {
+                "results": <total>,
+                "page": <current_page>,
+                "page_size": <page_size>,
+                "pages": <total_pages>
+            }
+        }
+        
+        Returns the next page number if there are more pages, None otherwise.
+        Note: Pages are typically 1-indexed (page 1, 2, 3...).
+        """
+        try:
+            response_data = response.json()
+            pagination = response_data.get("pagination", {})
+            current_page = pagination.get("page", 1)
+            total_pages = pagination.get("pages", 0)
+            
+            # If current page is less than total pages, return next page number
+            # Pages are typically 1-indexed
+            if current_page < total_pages:
+                return current_page + 1
+            
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"Error parsing pagination response: {e}")
+            return None
+    
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        """Return URL parameters for the request.
+        
+        Uses traditional page-based pagination instead of version-based.
+        """
+        params: dict = {}
+        
+        # Use page-based pagination
+        if next_page_token is not None:
+            params["page"] = next_page_token
+        else:
+            # First request, start from page 0 or 1 (depending on API)
+            params["page"] = 1
+        
+        # Add page_size parameter
+        if self.page_size:
+            params["page_size"] = self.page_size
+        
         return params
 
 
-class SuppliersStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "suppliers"
-    path = "/suppliers.json"
+class ConsignmentsStream(LightspeedXSeriesStream):
+    """Consignments stream for Lightspeed X-Series API.
+    
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters consignments with version > after.
+    Consignments can be of type: SUPPLIER (buy orders), OUTLET (transfers), STOCKTAKE, or RETURN.
+    Requires: consignments:read scope
+    """
+    
+    name = "consignments"
+    path = "/api/2.0/consignments"
     primary_keys = ["id"]
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-    records_jsonpath = "$.suppliers[*]"
+    replication_key = "version"
+    # Note: API may return direct array or data wrapper - parse_response handles both
+    records_jsonpath = "$.data[*]"  # Standard structure (parse_response handles array if needed)
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
+    
     schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("title", th.StringType),
-        th.Property("attention_of", th.StringType),
-        th.Property("street", th.StringType),
-        th.Property("street2", th.StringType),
-        th.Property("number", th.StringType),
-        th.Property("extension", th.StringType),
-        th.Property("zip_code", th.StringType),
-        th.Property("city", th.StringType),
-        th.Property("region", th.StringType),
-        th.Property("country_id", country),
+        # Primary identifiers
+        th.Property("id", th.StringType),
+        th.Property("version", th.IntegerType),
+        
+        # Relationships
+        th.Property("outlet_id", th.StringType),  # required - outlet where stock will be received
+        th.Property("supplier_id", th.StringType),  # for SUPPLIER type consignments
+        th.Property("source_outlet_id", th.StringType),  # for OUTLET type (stock transfers)
+        
+        # Basic consignment information
+        th.Property("name", th.StringType),  # required - Consignment name
+        th.Property("type", th.StringType),  # required - enum: SUPPLIER, OUTLET, STOCKTAKE, RETURN
+        th.Property("status", th.StringType),  # enum: OPEN, SENT, DISPATCHED, RECEIVED, etc.
+        
+        # Dates
+        th.Property("consignment_date", th.DateTimeType),  # Creation date
+        th.Property("due_at", th.DateTimeType),  # Due date
+        th.Property("received_at", th.DateTimeType),  # Date when consignment was received
+        
+        # References
+        th.Property("supplier_invoice", th.StringType),  # Supplier invoice number
+        th.Property("reference", th.StringType),  # Order number
+        
+        # Totals
+        th.Property("total_count_gain", th.NumberType),  # Items over expected level
+        th.Property("total_cost_gain", th.NumberType),  # Cost of items over expected level
+        th.Property("total_count_loss", th.NumberType),  # Items below expected level
+        th.Property("total_cost_loss", th.NumberType),  # Cost of items below expected level
+        
+        # Timestamps
+        th.Property("created_at", th.DateTimeType),
+        th.Property("updated_at", th.DateTimeType),
+        th.Property("deleted_at", th.DateTimeType),
     ).to_dict()
-
-
-class CustomersStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "customers"
-    path = "/customers.json"
-    primary_keys = ["id"]
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-    records_jsonpath = "$.customers[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("lastOnlineAt", th.DateTimeType),
-        th.Property("isConfirmed", th.BooleanType),
-        th.Property("remoteIp", th.StringType),
-        th.Property("userAgent", th.StringType),
-        th.Property("referralId", th.StringType),
-        th.Property("gender", th.StringType),
-        th.Property("birthDate", th.StringType),
-        th.Property("nationalId", th.StringType),
-        th.Property("email", th.StringType),
-        th.Property("firstname", th.StringType),
-        th.Property("middlename", th.StringType),
-        th.Property("lastname", th.StringType),
-        th.Property("phone", th.StringType),
-        th.Property("mobile", th.StringType),
-        th.Property("isCompany", th.BooleanType),
-        th.Property("companyName", th.StringType),
-        th.Property("companyCoCNumber", th.StringType),
-        th.Property("companyVatNumber", th.StringType),
-        th.Property("addressBillingName", th.StringType),
-        th.Property("addressBillingStreet", th.StringType),
-        th.Property("addressBillingStreet2", th.StringType),
-        th.Property("addressBillingNumber", th.StringType),
-        th.Property("addressBillingExtension", th.StringType),
-        th.Property("addressBillingZipcode", th.StringType),
-        th.Property("addressBillingCity", th.BooleanType),
-        th.Property("addressBillingRegion", th.StringType),
-        th.Property("addressBillingCountry", country),
-        th.Property("addressShippingCompany", th.StringType),
-        th.Property("addressShippingName", th.StringType),
-        th.Property("addressShippingStreet", th.StringType),
-        th.Property("addressShippingStreet2", th.StringType),
-        th.Property("addressShippingNumber", th.StringType),
-        th.Property("addressShippingExtension", th.StringType),
-        th.Property("addressShippingZipcode", th.StringType),
-        th.Property("addressShippingCity", th.StringType),
-        th.Property("addressShippingRegion", th.StringType),
-        th.Property("addressShippingCountry", country),
-        th.Property("memo", th.StringType),
-        th.Property("doNotifyRegistered", th.BooleanType),
-        th.Property("doNotifyConfirmed", th.BooleanType),
-        th.Property("doNotifyPassword", th.BooleanType),
-        th.Property("groups", resources),
-        th.Property("invoices", resources),
-        th.Property("orders", resources),
-        th.Property("reviews", resources),
-        th.Property("shipments", resources),
-        th.Property("tickets", resources),
-        th.Property("metafields", resources),
-        th.Property("login", resources),
-    ).to_dict()
-
-
-class ReturnsStream(LightspeedStream):
-    """Define custom stream."""
-
-    name = "returns"
-    path = "/returns.json"
-    primary_keys = ["id"]
-    replication_key = "updatedAt"
-    replication_filter_field = "updated_at_min"
-    records_jsonpath = "$.returns[*]"
-    schema = th.PropertiesList(
-        th.Property("id", th.IntegerType),
-        th.Property("createdAt", th.DateTimeType),
-        th.Property("updatedAt", th.DateTimeType),
-        th.Property("customerId", th.IntegerType),
-        th.Property("orderId", th.IntegerType),
-        th.Property("status", th.StringType),
-        th.Property("numProducts", th.IntegerType),
-        th.Property("priceExcl", th.NumberType),
-        th.Property("priceIncl", th.NumberType),
-        th.Property("isStockAdjusted", th.BooleanType),
-        th.Property("returnReason", th.StringType),
-        th.Property("returnAction", th.StringType),
-        th.Property("customerComment", th.StringType),
-        th.Property("staffNote", th.StringType),
-        th.Property("mailMessage", th.StringType),
-        th.Property("notifyStatus", th.BooleanType),
-        th.Property(
-            "orderProducts",
-            th.ArrayType(
-                th.ObjectType(
-                    th.Property("id", th.IntegerType),
-                    th.Property("quantity", th.IntegerType),
-                )
-            ),
-        ),
-    ).to_dict()
+    
+    def get_optional_params(self) -> list:
+        """Return a list of optional parameter names specific to consignments stream."""
+        return [
+            "type",  # Filter by type: SUPPLIER, OUTLET, STOCKTAKE, RETURN
+            "status",  # Filter by status: OPEN, SENT, DISPATCHED, RECEIVED, etc.
+            "outlet_id",  # Filter by outlet
+            "before",  # Upper limit for version numbers
+        ]
+    
+    def parse_response(self, response: requests.Response) -> Iterable[dict]:
+        """Parse the response and return an iterator of result records.
+        
+        This endpoint may return a direct array or have a data wrapper.
+        We'll try to handle both cases.
+        """
+        try:
+            response_data = response.json()
+            
+            # Check if response has 'data' wrapper (like other endpoints)
+            if isinstance(response_data, dict) and "data" in response_data:
+                records = response_data["data"]
+            # Otherwise, assume it's a direct array
+            elif isinstance(response_data, list):
+                records = response_data
+            else:
+                self.logger.warning(f"Unexpected response structure: {type(response_data)}")
+                records = []
+            
+            for record in records:
+                yield record
+                
+        except Exception as e:
+            self.logger.error(f"Error parsing response: {e}")
+            raise

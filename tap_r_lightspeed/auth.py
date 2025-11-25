@@ -22,6 +22,59 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     ) -> None:
         super().__init__(stream=stream, auth_endpoint=auth_endpoint, oauth_scopes=oauth_scopes)
         self._tap = stream._tap
+        
+        # Initialize token from config if available (to avoid unnecessary refreshes)
+        # According to Lightspeed X-Series docs: https://x-series-api.lightspeedhq.com/docs/authorization
+        # We should use the access token until it expires, then request a new one.
+        if "access_token" in self.config and self.config["access_token"]:
+            self.access_token = self.config["access_token"]
+            
+            # Calculate expires_in and last_refreshed from expires timestamp if available
+            # expires is an absolute timestamp in seconds since Unix epoch
+            if "expires" in self.config and self.config["expires"]:
+                try:
+                    expires_timestamp = int(self.config["expires"])
+                    current_timestamp = int(utils.now().timestamp())
+                    remaining_seconds = expires_timestamp - current_timestamp
+                    
+                    if remaining_seconds > 0:
+                        self.expires_in = remaining_seconds
+                        # Calculate when token was refreshed: expires - original_expires_in
+                        # If we have expires_in in config, use it to calculate last_refreshed
+                        if "expires_in" in self.config and self.config["expires_in"]:
+                            original_expires_in = int(self.config["expires_in"])
+                            # last_refreshed = expires - original_expires_in
+                            last_refreshed_timestamp = expires_timestamp - original_expires_in
+                            # Convert timestamp to datetime
+                            from datetime import datetime, timezone
+                            self.last_refreshed = datetime.fromtimestamp(last_refreshed_timestamp, tz=timezone.utc)
+                        else:
+                            # If no original expires_in, use remaining_seconds as expires_in
+                            # and assume token was just refreshed (conservative approach)
+                            self.last_refreshed = utils.now()
+                    else:
+                        # Token already expired - will trigger refresh
+                        self.expires_in = 0
+                        self.last_refreshed = None
+                except (ValueError, TypeError) as e:
+                    # If expires is invalid, try to use expires_in
+                    self.logger.debug(f"Could not parse expires timestamp: {e}")
+                    if "expires_in" in self.config and self.config["expires_in"]:
+                        self.expires_in = int(self.config["expires_in"])
+                        # Without expires timestamp, assume token was just refreshed
+                        self.last_refreshed = utils.now()
+                    else:
+                        self.expires_in = None
+                        self.last_refreshed = None
+            elif "expires_in" in self.config and self.config["expires_in"]:
+                # Use expires_in if expires timestamp not available
+                self.expires_in = int(self.config["expires_in"])
+                # Without expires timestamp, assume token was just refreshed
+                self.last_refreshed = utils.now()
+            else:
+                # No expiration info, assume token is valid (never expires)
+                self.expires_in = None
+                self.last_refreshed = utils.now()
 
     @property
     def oauth_request_body(self) -> dict:
@@ -85,12 +138,58 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     def update_access_token(self) -> None:
         """Update `access_token` along with: `last_refreshed` and `expires_in`.
 
+        According to Lightspeed X-Series rate limiting docs:
+        https://x-series-api.lightspeedhq.com/docs/rate_limiting
+        The authorization endpoints have their own rate limiting settings.
+        If we receive a 429 (Too Many Requests), we should respect the Retry-After header.
+
         Raises:
             RuntimeError: When OAuth login fails.
         """
         request_time = utc_now()
         auth_request_payload = self.oauth_request_payload
         token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+        
+        # Handle rate limiting (429 Too Many Requests)
+        if token_response.status_code == 429:
+            retry_after = token_response.headers.get("Retry-After")
+            error_msg = "Rate limit exceeded"
+            try:
+                error_json = token_response.json()
+                error_msg = error_json.get("message", error_msg)
+            except:
+                error_msg = token_response.text or error_msg
+            
+            if retry_after:
+                # Retry-After is in HTTP date format (RFC1123)
+                from email.utils import parsedate_to_datetime
+                try:
+                    retry_datetime = parsedate_to_datetime(retry_after)
+                    wait_seconds = (retry_datetime - utc_now()).total_seconds()
+                    if wait_seconds > 0:
+                        self.logger.warning(
+                            f"Rate limited on token refresh. Waiting {wait_seconds:.0f} seconds "
+                            f"until {retry_datetime} before retrying."
+                        )
+                        import time
+                        time.sleep(wait_seconds)
+                        # Retry the request
+                        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+                    else:
+                        # Retry immediately if wait time has passed
+                        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+                except Exception as e:
+                    self.logger.warning(f"Could not parse Retry-After header '{retry_after}': {e}")
+            else:
+                # No Retry-After header, wait 60 seconds as fallback
+                self.logger.warning(
+                    "Rate limited on token refresh. No Retry-After header. "
+                    "Waiting 60 seconds before retrying."
+                )
+                import time
+                time.sleep(60)
+                token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+        
         try:
             token_response.raise_for_status()
             self.logger.info("OAuth authorization attempt was successful.")
@@ -117,11 +216,18 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
             )
         self.last_refreshed = request_time
 
-        # Store access_token and refresh_token in config file
+        # Store access_token, refresh_token, expires, and expires_in in config file
         # This allows the tokens to persist across tap runs
         self._tap._config["access_token"] = token_json["access_token"]
         if "refresh_token" in token_json:
             self._tap._config["refresh_token"] = token_json["refresh_token"]
+        
+        # Store expires timestamp (absolute time when token expires)
+        # This is more reliable than expires_in for checking validity across runs
+        if self.expires_in:
+            expires_timestamp = int(request_time.timestamp()) + int(self.expires_in)
+            self._tap._config["expires"] = expires_timestamp
+        self._tap._config["expires_in"] = self.expires_in
 
         with open(self._tap.config_file, "w") as outfile:
             json.dump(self._tap._config, outfile, indent=4)
