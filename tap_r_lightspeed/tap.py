@@ -7,10 +7,18 @@ from singer_sdk import typing as th
 
 from tap_r_lightspeed.streams import (
     AccountStream,
+    ItemStream,
+    VendorStream,
+    OrderStream,
+    SaleStream,
 )
 
 STREAM_TYPES = [
     AccountStream,
+    ItemStream,
+    VendorStream,
+    OrderStream,
+    SaleStream,
 ]
 
 

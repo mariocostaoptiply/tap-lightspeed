@@ -22,6 +22,8 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     ) -> None:
         super().__init__(stream=stream, auth_endpoint=auth_endpoint, oauth_scopes=oauth_scopes)
         self._tap = stream._tap
+        # Track if we've already attempted a refresh to avoid infinite loops
+        self._refresh_attempted = False
         
         # Initialize token from config if available (to avoid unnecessary refreshes)
         # According to Lightspeed R-Series docs: https://developers.lightspeedhq.com/retail/authentication/
@@ -78,6 +80,24 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
                 self.last_refreshed = utils.now()
 
     @property
+    def auth_headers(self) -> dict:
+        """Return headers to be used on authenticated requests.
+        
+        Override to ensure token is refreshed if needed before returning headers.
+        """
+        # Check if token is valid, if not, refresh it
+        if not self.is_token_valid():
+            if not self._refresh_attempted:
+                self.logger.info("Token is invalid or expired, refreshing...")
+                self.update_access_token()
+            else:
+                self.logger.warning(
+                    "Token refresh already attempted but failed. "
+                    "This may indicate a problem with refresh_token or API endpoint."
+                )
+        return super().auth_headers
+    
+    @property
     def oauth_request_body(self) -> dict:
         """Define the OAuth request body for the Lightspeed R-Series API refresh token grant.
         
@@ -106,15 +126,37 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         Returns:
             True if the token is valid (fresh).
         """
+        # If we have an expires timestamp in config, use it for more accurate validation
+        if "expires" in self.config and self.config["expires"]:
+            try:
+                expires_timestamp = int(self.config["expires"])
+                current_timestamp = int(utils.now().timestamp())
+                # Add 60 second buffer to refresh before actual expiration
+                if current_timestamp >= (expires_timestamp - 60):
+                    self.logger.debug(
+                        f"Token expires at {expires_timestamp}, current time {current_timestamp}. "
+                        "Token is expired or will expire soon, will refresh."
+                    )
+                    return False
+                return True
+            except (ValueError, TypeError) as e:
+                self.logger.debug(f"Could not parse expires timestamp: {e}")
+        
+        # Fallback to expires_in and last_refreshed
         if self.expires_in is not None:
             self.expires_in = int(self.expires_in)
         if self.last_refreshed is None:
             return False
         if not self.expires_in:
             return True
-        if self.expires_in > (utils.now() - self.last_refreshed).total_seconds():
-            return True
-        return False
+        # Add 60 second buffer to refresh before actual expiration
+        elapsed = (utils.now() - self.last_refreshed).total_seconds()
+        if elapsed >= (self.expires_in - 60):
+            self.logger.debug(
+                f"Token expired or will expire soon. Elapsed: {elapsed}s, expires_in: {self.expires_in}s"
+            )
+            return False
+        return True
 
     @classmethod
     def create_for_stream(cls, stream) -> "LightspeedOAuthAuthenticator":
@@ -148,6 +190,8 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         Raises:
             RuntimeError: When OAuth login fails.
         """
+        self.logger.info("Refreshing access token...")
+        self._refresh_attempted = True
         request_time = utc_now()
         auth_request_payload = self.oauth_request_payload
         token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
@@ -211,6 +255,12 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         # Use expires_in from response, default to 3600 (60 minutes) if not present
         # See: https://developers.lightspeedhq.com/retail/authentication/refresh-token/
         self.expires_in = token_json.get("expires_in", 3600)
+        self._refresh_attempted = False  # Reset after successful refresh
+        
+        self.logger.info(
+            f"Token refreshed successfully. New token expires in {self.expires_in} seconds "
+            f"({self.expires_in / 60:.1f} minutes)"
+        )
         if self.expires_in is None:
             self.logger.debug(
                 "No expires_in received in OAuth response and no "
@@ -232,6 +282,21 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
             self._tap._config["expires"] = expires_timestamp
         self._tap._config["expires_in"] = self.expires_in
 
-        with open(self._tap.config_file, "w") as outfile:
-            json.dump(self._tap._config, outfile, indent=4)
+        # Save to config file if config_file path is available
+        if self._tap.config_file:
+            try:
+                with open(self._tap.config_file, "w") as outfile:
+                    json.dump(self._tap._config, outfile, indent=4)
+                self.logger.info(
+                    f"Successfully saved new access token to config file: {self._tap.config_file}"
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to save access token to config file {self._tap.config_file}: {e}"
+                )
+        else:
+            self.logger.warning(
+                "config_file not set in tap. New access token will not be persisted to disk. "
+                "Set config_file in Tap.__init__ to enable token persistence."
+            )
 
