@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script para obter um novo refresh token do Lightspeed X-Series.
-Siga os passos da documentação: https://x-series-api.lightspeedhq.com/docs/authorization
+Script para obter um novo refresh token do Lightspeed R-Series.
+Siga os passos da documentação: https://r-series-api.lightspeedhq.com/docs/authorization
 """
 
 import json
@@ -61,7 +61,7 @@ def refresh_access_token(refresh_token, domain_prefix):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Lightspeed X-Series - Obter Novo Token")
+    print("Lightspeed R-Series - Obter Novo Token")
     print("=" * 60)
     print("\nOpção 1: Obter novo token (fluxo completo OAuth)")
     print("Opção 2: Tentar refresh com token existente")

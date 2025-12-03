@@ -12,7 +12,7 @@ from typing import Optional
 # The SingletonMeta metaclass makes your streams reuse the same authenticator instance.
 # If this behaviour interferes with your use-case, you can remove the metaclass.
 class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
-    """Authenticator class for Lightspeed Retail (X-Series) API using OAuth 2.0."""
+    """Authenticator class for Lightspeed Retail (R-Series) API using OAuth 2.0."""
 
     def __init__(
         self,
@@ -24,8 +24,9 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         self._tap = stream._tap
         
         # Initialize token from config if available (to avoid unnecessary refreshes)
-        # According to Lightspeed X-Series docs: https://x-series-api.lightspeedhq.com/docs/authorization
+        # According to Lightspeed R-Series docs: https://developers.lightspeedhq.com/retail/authentication/
         # We should use the access token until it expires, then request a new one.
+        # Tokens generally expire after 60 minutes (3600 seconds).
         if "access_token" in self.config and self.config["access_token"]:
             self.access_token = self.config["access_token"]
             
@@ -78,16 +79,19 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
 
     @property
     def oauth_request_body(self) -> dict:
-        """Define the OAuth request body for the Lightspeed X-Series API refresh token grant.
+        """Define the OAuth request body for the Lightspeed R-Series API refresh token grant.
         
-        According to Lightspeed X-Series documentation:
-        https://x-series-api.lightspeedhq.com/docs/authorization
+        According to Lightspeed R-Series documentation:
+        https://developers.lightspeedhq.com/retail/authentication/refresh-token/
         
         The refresh token request requires:
         - client_id: Your application's client ID
         - client_secret: Your application's client secret
         - grant_type: "refresh_token"
         - refresh_token: The refresh token to exchange for a new access token
+        
+        Note: Refresh tokens should only be used when the access token has expired or shortly
+        before expiration. Excessive use may result in rate limiting.
         """
         return {
             "client_id": self.config["client_id"],
@@ -116,20 +120,16 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     def create_for_stream(cls, stream) -> "LightspeedOAuthAuthenticator":
         """Create an authenticator instance for the given stream.
         
-        For Lightspeed X-Series, the token endpoint is domain-specific:
-        https://{domain_prefix}.retail.lightspeed.app/api/1.0/token
+        For Lightspeed R-Series, the token endpoint is global (not domain-specific):
+        https://cloud.lightspeedapp.com/auth/oauth/token
+        
+        See: https://developers.lightspeedhq.com/retail/authentication/refresh-token/
         
         Returns:
-            LightspeedOAuthAuthenticator instance configured with Lightspeed X-Series token endpoint.
+            LightspeedOAuthAuthenticator instance configured with Lightspeed R-Series token endpoint.
         """
-        domain_prefix = stream.config.get("domain_prefix")
-        if not domain_prefix:
-            raise ValueError(
-                "domain_prefix is required in config for Lightspeed X-Series API. "
-                "This is the retailer's domain prefix (e.g., 'mystore' for mystore.retail.lightspeed.app)"
-            )
-        
-        auth_endpoint = f"https://{domain_prefix}.retail.lightspeed.app/api/1.0/token"
+        # R-Series uses a global OAuth endpoint, not domain-specific
+        auth_endpoint = "https://cloud.lightspeedapp.com/auth/oauth/token"
         return cls(
             stream=stream,
             auth_endpoint=auth_endpoint,
@@ -138,10 +138,12 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     def update_access_token(self) -> None:
         """Update `access_token` along with: `last_refreshed` and `expires_in`.
 
-        According to Lightspeed X-Series rate limiting docs:
-        https://x-series-api.lightspeedhq.com/docs/rate_limiting
-        The authorization endpoints have their own rate limiting settings.
+        According to Lightspeed R-Series rate limiting docs:
+        https://developers.lightspeedhq.com/retail/introduction/ratelimits/
         If we receive a 429 (Too Many Requests), we should respect the Retry-After header.
+        
+        Note: Refresh tokens should only be used when necessary. Excessive use may result
+        in rate limiting or your client being blocked.
 
         Raises:
             RuntimeError: When OAuth login fails.
@@ -204,10 +206,11 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
             )
         token_json = token_response.json()
         self.access_token = token_json["access_token"]
-        # Lightspeed X-Series tokens expire in varies (typically 86400 seconds / 24 hours for initial, 
-        # 604800 seconds / 7 days for refreshed tokens, but can vary)
-        # Use expires_in from response, default to 86400 if not present
-        self.expires_in = token_json.get("expires_in", 86400)
+        # Lightspeed R-Series tokens generally expire after 60 minutes (3600 seconds)
+        # Refresh tokens may return tokens with different expiry times (e.g., 1800 seconds / 30 minutes)
+        # Use expires_in from response, default to 3600 (60 minutes) if not present
+        # See: https://developers.lightspeedhq.com/retail/authentication/refresh-token/
+        self.expires_in = token_json.get("expires_in", 3600)
         if self.expires_in is None:
             self.logger.debug(
                 "No expires_in received in OAuth response and no "

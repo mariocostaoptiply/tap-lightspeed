@@ -140,3 +140,7 @@ dmypy.json
 # TODO DELETE
 /example/
 /venv/
+
+
+catalog.json
+account-*.jsonl

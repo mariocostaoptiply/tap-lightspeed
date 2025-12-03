@@ -1,6 +1,6 @@
 # tap-lightspeed
 
-`tap-x-lightspeed` is a Singer tap for Lightspeed X-Series that produces JSON-formatted 
+`tap-x-lightspeed` is a Singer tap for Lightspeed R-Series that produces JSON-formatted 
 data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md) 
 
 ## Configuration

@@ -4,7 +4,7 @@ project_id: tap-x-lightspeed
 plugins:
   extractors:
   - name: tap-x-lightspeed
-    namespace: tap_x_lightspeed
+    namespace: tap_r_lightspeed
     pip_url: -e .
     capabilities:
     - state

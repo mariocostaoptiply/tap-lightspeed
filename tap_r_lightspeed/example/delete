@@ -9,7 +9,7 @@
     "deleted": true
 }
 
-# Lightspeed X-Series API Configuration
+# Lightspeed R-Series API Configuration
 # Required fields
 DOMAIN_PREFIX=mariooptiply
 CLIENT_ID=your_client_id_here
