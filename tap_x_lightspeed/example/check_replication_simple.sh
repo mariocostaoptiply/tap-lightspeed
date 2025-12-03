@@ -8,7 +8,7 @@ echo ""
 echo "Executando tap e extraindo mensagens STATE..."
 echo ""
 
-tap-r-lightspeed --config config.json --catalog catalog.json 2>&1 | \
+tap-x-lightspeed --config config.json --catalog catalog.json 2>&1 | \
     grep '"type": "STATE"' | \
     tail -1 | \
     python3 -c "
@@ -26,5 +26,5 @@ except Exception as e:
 
 echo ""
 echo "Para ver todos os records com version:"
-echo "  tap-r-lightspeed --config config.json --catalog catalog.json | grep '\"version\"' | head -10"
+echo "  tap-x-lightspeed --config config.json --catalog catalog.json | grep '\"version\"' | head -10"
 

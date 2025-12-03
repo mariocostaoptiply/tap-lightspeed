@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "tap-r-lightspeed"
+name = "tap-x-lightspeed"
 version = "0.0.1"
-description = "`tap-r-lightspeed` is a Singer tap for Lightspeed r series, built with the Meltano SDK for Singer Taps."
+description = "`tap-x-lightspeed` is a Singer tap for Lightspeed X-Series, built with the Meltano SDK for Singer Taps."
 authors = ["Hotglue"]
 keywords = [
     "ELT",
@@ -28,7 +28,7 @@ isort = "^5.10.1"
 [tool.isort]
 profile = "black"
 multi_line_output = 3 # Vertical Hanging Indent
-src_paths = "tap_lightspeed"
+src_paths = "tap_x_lightspeed"
 
 [build-system]
 requires = ["poetry-core>=1.0.8"]
@@ -36,4 +36,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 # CLI declaration
-tap-r-lightspeed = "tap_r_lightspeed.tap:TapRLightspeed.cli"
+tap-x-lightspeed = "tap_x_lightspeed.tap:TapXLightspeed.cli"

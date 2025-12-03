@@ -5,13 +5,14 @@ from typing import List
 from singer_sdk import Stream, Tap
 from singer_sdk import typing as th
 
-from tap_r_lightspeed.streams import (
+from tap_x_lightspeed.streams import (
     ProductsStream,
     InventoryStream,
     SuppliersStream,
     SalesStream,
     OutletsStream,
     ConsignmentsStream,
+    ConsignmentProductsStream,
 )
 
 STREAM_TYPES = [
@@ -21,11 +22,12 @@ STREAM_TYPES = [
     SalesStream,
     OutletsStream,
     ConsignmentsStream,
+    ConsignmentProductsStream,
 ]
 
 
-class TapRLightspeed(Tap):
-    """TapRLightspeed Retail (X-Series) tap class."""
+class TapXLightspeed(Tap):
+    """TapXLightspeed Retail (X-Series) tap class."""
 
     def __init__(
         self,
@@ -113,4 +115,4 @@ class TapRLightspeed(Tap):
 
 
 if __name__ == "__main__":
-    TapRLightspeed.cli()
+    TapXLightspeed.cli()

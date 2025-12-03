@@ -18,7 +18,7 @@ echo -e "${YELLOW}1. Primeira execução (sem state)${NC}"
 echo "Executando tap e guardando output em /tmp/tap_output_1.jsonl..."
 echo ""
 
-tap-r-lightspeed --config config.json --catalog catalog.json 2>&1 | tee /tmp/tap_output_1.jsonl
+tap-x-lightspeed --config config.json --catalog catalog.json 2>&1 | tee /tmp/tap_output_1.jsonl
 
 echo ""
 echo -e "${GREEN}✓ Primeira execução concluída${NC}"
@@ -58,7 +58,7 @@ if [ ! -z "$STATE_1" ]; then
 fi
 
 # Executar segunda vez com state
-tap-r-lightspeed --config config.json --catalog catalog.json --state /tmp/state.json 2>&1 | tee /tmp/tap_output_2.jsonl
+tap-x-lightspeed --config config.json --catalog catalog.json --state /tmp/state.json 2>&1 | tee /tmp/tap_output_2.jsonl
 
 echo ""
 echo -e "${GREEN}✓ Segunda execução concluída${NC}"

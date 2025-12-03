@@ -86,7 +86,7 @@ def main():
     
     if not jsonl_files:
         print(f"Nenhum ficheiro .jsonl encontrado em '{output_dir}'")
-        print("Execute primeiro: tap-r-lightspeed --config config.json --catalog catalog.json | target-jsonl")
+        print("Execute primeiro: tap-x-lightspeed --config config.json --catalog catalog.json | target-jsonl")
         sys.exit(1)
     
     # Converter cada JSONL para CSV

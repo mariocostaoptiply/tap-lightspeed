@@ -3,7 +3,7 @@
 from typing import Optional, Any, Dict, Iterable
 import requests
 from singer_sdk import typing as th
-from tap_r_lightspeed.client import LightspeedXSeriesStream
+from tap_x_lightspeed.client import LightspeedXSeriesStream
 
 
 class ProductsStream(LightspeedXSeriesStream):
@@ -666,28 +666,76 @@ class ConsignmentsStream(LightspeedXSeriesStream):
             "before",  # Upper limit for version numbers
         ]
     
-    def parse_response(self, response: requests.Response) -> Iterable[dict]:
-        """Parse the response and return an iterator of result records.
+    def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
+        """Return a context dictionary for child streams.
         
-        This endpoint may return a direct array or have a data wrapper.
-        We'll try to handle both cases.
+        Provides consignment_id to child streams like ConsignmentProductsStream.
         """
-        try:
-            response_data = response.json()
-            
-            # Check if response has 'data' wrapper (like other endpoints)
-            if isinstance(response_data, dict) and "data" in response_data:
-                records = response_data["data"]
-            # Otherwise, assume it's a direct array
-            elif isinstance(response_data, list):
-                records = response_data
-            else:
-                self.logger.warning(f"Unexpected response structure: {type(response_data)}")
-                records = []
-            
-            for record in records:
-                yield record
-                
-        except Exception as e:
-            self.logger.error(f"Error parsing response: {e}")
-            raise
+        return {
+            "consignment_id": record["id"],
+        }
+
+class ConsignmentProductsStream(LightspeedXSeriesStream):
+    """Consignment Products stream for Lightspeed X-Series API.
+    
+    Child stream of ConsignmentsStream that retrieves products for each consignment.
+    Uses version-based pagination as described in:
+    https://x-series-api.lightspeedhq.com/docs/sync_entity_to_external_system
+    
+    The 'after' parameter filters consignment products with version > after.
+    Endpoint: /api/2.0/consignments/{consignment_id}/products
+    Requires: consignments:read scope
+    """
+    
+    name = "consignment_products"
+    path = "/api/2.0/consignments/{consignment_id}/products"
+    primary_keys = ["consignment_id", "product_id", "version"]
+    replication_key = "version"
+    records_jsonpath = "$.data[*]"  # Extract products from data array
+    page_size = 100  # Default page size for Lightspeed X-Series API (max is 200)
+    parent_stream_type = ConsignmentsStream
+    
+    schema = th.PropertiesList(
+        # Primary identifiers
+        th.Property("consignment_id", th.StringType, required=True),
+        th.Property("product_id", th.StringType, required=True),
+        th.Property("version", th.IntegerType),
+        
+        # Product details
+        th.Property("count", th.StringType),  # Expected count as string (decimal) - may come as number from API
+        th.Property("received", th.StringType),  # Received count as string (decimal) - may come as number from API
+        th.Property("cost", th.StringType),  # Cost as string (decimal) - may come as number from API
+        th.Property("is_included", th.BooleanType),  # Whether product is included in consignment
+        th.Property("status", th.StringType),  # Status like "RECEIVE_SUCCESS"
+        
+        # Additional fields that may be present in API response
+        th.Property("product_sku", th.StringType),  # Product SKU if available
+        th.Property("deleted_at", th.DateTimeType),  # Deletion timestamp if product was deleted
+        
+        # Timestamps
+        th.Property("created_at", th.DateTimeType),
+        th.Property("updated_at", th.DateTimeType),
+    ).to_dict()
+    
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        """Add consignment_id to each record from context and normalize numeric fields to strings.
+        
+        This ensures each consignment product record includes the parent consignment ID.
+        Also converts count, received, and cost from numbers to strings if needed,
+        as the API may return these as either numbers or strings.
+        """
+        if context:
+            row["consignment_id"] = context.get("consignment_id")
+        
+        # Convert numeric fields to strings if they are numbers
+        # The API may return these as numbers (e.g., 5) or strings (e.g., "10.00000")
+        for field in ["count", "received", "cost"]:
+            if field in row and row[field] is not None:
+                if isinstance(row[field], (int, float)):
+                    # Convert number to string, preserving decimal precision
+                    if isinstance(row[field], float):
+                        row[field] = f"{row[field]:.5f}".rstrip('0').rstrip('.')
+                    else:
+                        row[field] = str(row[field])
+        
+        return row
