@@ -193,8 +193,14 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         self.logger.info("Refreshing access token...")
         self._refresh_attempted = True
         request_time = utc_now()
-        auth_request_payload = self.oauth_request_payload
-        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+        # Use oauth_request_body directly and send as x-www-form-encoded
+        auth_request_payload = self.oauth_request_body
+        self.logger.debug(f"Token refresh request payload: {auth_request_payload}")
+        token_response = requests.post(
+            self.auth_endpoint,
+            data=auth_request_payload,  # data= sends as x-www-form-encoded
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
         
         # Handle rate limiting (429 Too Many Requests)
         if token_response.status_code == 429:
@@ -220,10 +226,18 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
                         import time
                         time.sleep(wait_seconds)
                         # Retry the request
-                        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+                        token_response = requests.post(
+                            self.auth_endpoint,
+                            data=auth_request_payload,
+                            headers={"Content-Type": "application/x-www-form-urlencoded"}
+                        )
                     else:
                         # Retry immediately if wait time has passed
-                        token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+                        token_response = requests.post(
+                            self.auth_endpoint,
+                            data=auth_request_payload,
+                            headers={"Content-Type": "application/x-www-form-urlencoded"}
+                        )
                 except Exception as e:
                     self.logger.warning(f"Could not parse Retry-After header '{retry_after}': {e}")
             else:
@@ -234,17 +248,43 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
                 )
                 import time
                 time.sleep(60)
-                token_response = requests.post(self.auth_endpoint, data=auth_request_payload)
+                token_response = requests.post(
+                    self.auth_endpoint,
+                    data=auth_request_payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
+        
+        # Log response details for debugging
+        self.logger.debug(f"Token refresh response status: {token_response.status_code}")
+        self.logger.debug(f"Token refresh response headers: {dict(token_response.headers)}")
         
         try:
             token_response.raise_for_status()
             self.logger.info("OAuth authorization attempt was successful.")
+        except requests.exceptions.HTTPError as ex:
+            error_msg = "Unknown error"
+            try:
+                error_json = token_response.json()
+                error_msg = json.dumps(error_json)
+                self.logger.error(f"Token refresh failed with HTTP {token_response.status_code}: {error_msg}")
+            except:
+                error_msg = token_response.text
+                self.logger.error(f"Token refresh failed with HTTP {token_response.status_code}: {error_msg}")
+            
+            # Log the request details for debugging
+            self.logger.error(f"Token refresh endpoint: {self.auth_endpoint}")
+            self.logger.error(f"Token refresh payload keys: {list(auth_request_payload.keys())}")
+            
+            raise RuntimeError(
+                f"Failed OAuth login, response was '{error_msg}'. Status: {token_response.status_code}"
+            )
         except Exception as ex:
             error_msg = "Unknown error"
             try:
-                error_msg = token_response.json()
-            except:
                 error_msg = token_response.text
+            except:
+                pass
+            self.logger.error(f"Unexpected error during token refresh: {ex}")
             raise RuntimeError(
                 f"Failed OAuth login, response was '{error_msg}'. {ex}"
             )

@@ -246,7 +246,7 @@ class LightspeedRSeriesStream(RESTStream):
             
         except Exception as e:
             self.logger.debug(f"Error parsing pagination response: {e}")
-            return None
+        return None
 
     def get_optional_params(self) -> list:
         """Return a list of optional parameter names that can be added to the request.
@@ -477,14 +477,23 @@ class LightspeedRSeriesStream(RESTStream):
             # Check if error message clearly indicates a non-token issue
             is_non_token_error = any(keyword in response_text for keyword in non_token_keywords)
             
-            # Also check JSON response if available
+            # Also check JSON/XML response if available
             if not is_non_token_error:
                 try:
+                    # Try JSON first
                     error_json = response.json()
                     error_message = str(error_json).lower()
                     is_non_token_error = any(keyword in error_message for keyword in non_token_keywords)
                 except (ValueError, AttributeError):
-                    pass
+                    # If not JSON, might be XML (Lightspeed sometimes returns XML errors)
+                    # Check for "Access token could not be verified" which indicates expired token
+                    if "access token could not be verified" in response_text:
+                        is_non_token_error = False  # This is a token expiration error
+                    elif "access token has been revoked" in response_text:
+                        is_non_token_error = False  # This is also a token error
+                    else:
+                        # Check for other non-token keywords in XML
+                        is_non_token_error = any(keyword in response_text for keyword in non_token_keywords)
             
             msg = (
                 f"{response.status_code} Server Error: "
@@ -498,11 +507,25 @@ class LightspeedRSeriesStream(RESTStream):
                 )
                 raise FatalAPIError(msg)
             else:
-                # Assume token error and attempt refresh
+                # Assume token error - try to refresh token before retrying
                 self.logger.warning(
-                    f"Authentication error (401) detected. Assuming token issue and will attempt refresh. "
+                    f"Authentication error (401) detected. Attempting to refresh token. "
                     f"Response: {response.text[:200]}"
                 )
+                # Try to refresh the token
+                try:
+                    if not self.authenticator._refresh_attempted:
+                        self.logger.info("Refreshing access token due to 401 error...")
+                        self.authenticator.update_access_token()
+                        self.logger.info("Token refreshed successfully, will retry request")
+                    else:
+                        self.logger.warning(
+                            "Token refresh already attempted. This may indicate an invalid refresh_token."
+                        )
+                except Exception as e:
+                    self.logger.error(f"Failed to refresh token: {e}")
+                    # Still raise RetriableAPIError to allow retry with backoff
+                
                 raise RetriableAPIError(msg)
         elif response.status_code == 400 and "Please try again later." in response.text:
             msg = (

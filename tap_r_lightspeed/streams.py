@@ -582,6 +582,53 @@ class SaleStream(LightspeedRSeriesStream):
         th.Property("tippableAmount", th.StringType),
         th.Property("taxTotal", th.StringType),
         th.Property(
+            "SaleLines",
+            th.ObjectType(
+                th.Property(
+                    "SaleLine",
+                    th.ArrayType(
+                        th.ObjectType(
+                            th.Property("saleLineID", th.StringType),
+                            th.Property("createTime", th.DateTimeType),
+                            th.Property("timeStamp", th.DateTimeType),
+                            th.Property("unitQuantity", th.StringType),
+                            th.Property("unitPrice", th.StringType),
+                            th.Property("normalUnitPrice", th.StringType),
+                            th.Property("discountAmount", th.StringType),
+                            th.Property("discountPercent", th.StringType),
+                            th.Property("avgCost", th.StringType),
+                            th.Property("fifoCost", th.StringType),
+                            th.Property("tax", th.StringType),
+                            th.Property("tax1Rate", th.StringType),
+                            th.Property("tax2Rate", th.StringType),
+                            th.Property("isLayaway", th.StringType),
+                            th.Property("isWorkorder", th.StringType),
+                            th.Property("isSpecialOrder", th.StringType),
+                            th.Property("displayableSubtotal", th.StringType),
+                            th.Property("displayableUnitPrice", th.StringType),
+                            th.Property("lineType", th.StringType),
+                            th.Property("calcLineDiscount", th.StringType),
+                            th.Property("calcTransactionDiscount", th.StringType),
+                            th.Property("calcTotal", th.StringType),
+                            th.Property("calcSubtotal", th.StringType),
+                            th.Property("calcTax1", th.StringType),
+                            th.Property("calcTax2", th.StringType),
+                            th.Property("taxClassID", th.StringType),
+                            th.Property("customerID", th.StringType),
+                            th.Property("discountID", th.StringType),
+                            th.Property("employeeID", th.StringType),
+                            th.Property("itemID", th.StringType),
+                            th.Property("noteID", th.StringType),
+                            th.Property("parentSaleLineID", th.StringType),
+                            th.Property("shopID", th.StringType),
+                            th.Property("saleID", th.StringType),
+                            th.Property("itemFeeID", th.StringType),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        th.Property(
             "MetaData",
             th.ObjectType(
                 th.Property("tipOption1", th.StringType),
@@ -591,8 +638,26 @@ class SaleStream(LightspeedRSeriesStream):
         ),
     ).to_dict()
 
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        params["load_relations"] = json.dumps(["SaleLines"])
+        return params
+
     def post_process(self, row: dict, context: Optional[dict]) -> dict:
         if context:
             row["accountID"] = context.get("accountID")
             row["account_name"] = context.get("account_name")
+        
+        # Normalize SaleLines.SaleLine: convert single object to array
+        if "SaleLines" in row and row["SaleLines"]:
+            sale_lines = row["SaleLines"]
+            if "SaleLine" in sale_lines:
+                sale_line = sale_lines["SaleLine"]
+                if isinstance(sale_line, dict):
+                    sale_lines["SaleLine"] = [sale_line]
+                elif not isinstance(sale_line, list):
+                    sale_lines["SaleLine"] = []
+        
         return row
