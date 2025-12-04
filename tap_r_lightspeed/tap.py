@@ -11,6 +11,7 @@ from tap_r_lightspeed.streams import (
     VendorStream,
     OrderStream,
     SaleStream,
+    ShipmentStream,
 )
 
 STREAM_TYPES = [
@@ -19,6 +20,7 @@ STREAM_TYPES = [
     VendorStream,
     OrderStream,
     SaleStream,
+    ShipmentStream,
 ]
 
 

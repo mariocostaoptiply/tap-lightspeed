@@ -661,3 +661,157 @@ class SaleStream(LightspeedRSeriesStream):
                     sale_lines["SaleLine"] = []
         
         return row
+
+
+class ShipmentStream(LightspeedRSeriesStream):
+    """Define Shipment stream for Order Shipments.
+    
+    Endpoint: GET /API/V3/Account/{accountID}/Shipment.json
+    Documentation: https://developers.lightspeedhq.com/retail/endpoints/Order/
+    """
+
+    name = "shipments"
+    parent_stream_type = AccountStream
+    path = "/Account/{accountID}/Shipment.json"
+    primary_keys = ["orderShipmentID"]
+    replication_key = "timeStamp"
+
+    records_jsonpath = "$.OrderShipment[*]"
+
+    schema = th.PropertiesList(
+        th.Property("accountID", th.StringType, required=True),
+        th.Property("account_name", th.StringType),
+        th.Property("orderShipmentID", th.StringType, required=True),
+        th.Property("orderID", th.StringType),
+        th.Property("sequenceNumber", th.StringType),
+        th.Property("totalQtyReceived", th.StringType),
+        th.Property("totalVendorCost", th.StringType),
+        th.Property("totalCost", th.StringType),
+        th.Property("currencyCode", th.StringType),
+        th.Property("vendorCurrencyCode", th.StringType),
+        th.Property("vendorCurrencyRate", th.StringType),
+        th.Property("createTime", th.DateTimeType),
+        th.Property("paymentDueDate", th.StringType),
+        th.Property("shipmentPackingRefNum", th.StringType),
+        th.Property("timeStamp", th.DateTimeType, required=True),
+        th.Property("employeeID", th.StringType),
+        th.Property("receptionDate", th.DateTimeType),
+        th.Property("shippingCostMethod", th.StringType),
+        th.Property("shippingVendorCost", th.StringType),
+        th.Property("shippingCost", th.StringType),
+        th.Property("shippingCostOrderFullValue", th.StringType),
+        th.Property("shippingCostOrderFullVendorValue", th.StringType),
+        th.Property("discountMethod", th.StringType),
+        th.Property("discountMoneyVendorValue", th.StringType),
+        th.Property("discountMoneyValue", th.StringType),
+        th.Property("discountPercentValue", th.StringType),
+        th.Property("discountOrderFullMoneyValue", th.StringType),
+        th.Property("discountOrderFullMoneyVendorValue", th.StringType),
+        th.Property("cost", th.StringType),
+        th.Property("vendorCost", th.StringType),
+        th.Property("status", th.StringType),
+        th.Property(
+            "OrderShipmentItems",
+            th.ObjectType(
+                th.Property(
+                    "OrderShipmentItem",
+                    th.ArrayType(
+                        th.ObjectType(
+                            th.Property("orderShipmentItemID", th.StringType),
+                            th.Property("orderShipmentID", th.StringType),
+                            th.Property("qtyReceived", th.StringType),
+                            th.Property("vendorCost", th.StringType),
+                            th.Property("cost", th.StringType),
+                            th.Property("totalVendorCost", th.StringType),
+                            th.Property("totalCost", th.StringType),
+                            th.Property("shippingCost", th.StringType),
+                            th.Property("shippingVendorCost", th.StringType),
+                            th.Property("discountMoneyValue", th.StringType),
+                            th.Property("discountMoneyVendorValue", th.StringType),
+                            th.Property("discountPercentValue", th.StringType),
+                            th.Property("currencyCode", th.StringType),
+                            th.Property("vendorCurrencyCode", th.StringType),
+                            th.Property("vendorCurrencyRate", th.StringType),
+                            th.Property("createTime", th.DateTimeType),
+                            th.Property("timeStamp", th.DateTimeType),
+                            th.Property("employeeID", th.StringType),
+                            th.Property("itemID", th.StringType),
+                            th.Property("itemVendorID", th.StringType),
+                            th.Property("itemDescription", th.StringType),
+                            th.Property(
+                                "Item",
+                                th.ObjectType(
+                                    th.Property("itemID", th.StringType),
+                                    th.Property("systemSku", th.StringType),
+                                    th.Property("defaultCost", th.StringType),
+                                    th.Property("avgCost", th.StringType),
+                                    th.Property("fifoCost", th.StringType),
+                                    th.Property("discountable", th.StringType),
+                                    th.Property("tax", th.StringType),
+                                    th.Property("archived", th.StringType),
+                                    th.Property("itemType", th.StringType),
+                                    th.Property("serialized", th.StringType),
+                                    th.Property("description", th.StringType),
+                                    th.Property("modelYear", th.StringType),
+                                    th.Property("upc", th.StringType),
+                                    th.Property("ean", th.StringType),
+                                    th.Property("customSku", th.StringType),
+                                    th.Property("manufacturerSku", th.StringType),
+                                    th.Property("publishToEcom", th.StringType),
+                                    th.Property("timeStamp", th.DateTimeType),
+                                    th.Property("createTime", th.DateTimeType),
+                                    th.Property("categoryID", th.StringType),
+                                    th.Property("taxClassID", th.StringType),
+                                    th.Property("departmentID", th.StringType),
+                                    th.Property("itemMatrixID", th.StringType),
+                                    th.Property("itemAttributesID", th.StringType),
+                                    th.Property("manufacturerID", th.StringType),
+                                    th.Property("seasonID", th.StringType),
+                                    th.Property("defaultVendorID", th.StringType),
+                                    th.Property(
+                                        "Prices",
+                                        th.ObjectType(
+                                            th.Property(
+                                                "ItemPrice",
+                                                th.ArrayType(
+                                                    th.ObjectType(
+                                                        th.Property("amount", th.StringType),
+                                                        th.Property("useType", th.StringType),
+                                                        th.Property("useTypeID", th.StringType),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    ).to_dict()
+
+    def get_url_params(
+        self, context: Optional[dict], next_page_token: Optional[Any]
+    ) -> Dict[str, Any]:
+        params = super().get_url_params(context, next_page_token)
+        params["load_relations"] = json.dumps(["OrderShipmentItems"])
+        return params
+
+    def post_process(self, row: dict, context: Optional[dict]) -> dict:
+        if context:
+            row["accountID"] = context.get("accountID")
+            row["account_name"] = context.get("account_name")
+        
+        # Normalize OrderShipmentItems.OrderShipmentItem: convert single object to array
+        if "OrderShipmentItems" in row and row["OrderShipmentItems"]:
+            shipment_items = row["OrderShipmentItems"]
+            if "OrderShipmentItem" in shipment_items:
+                shipment_item = shipment_items["OrderShipmentItem"]
+                if isinstance(shipment_item, dict):
+                    shipment_items["OrderShipmentItem"] = [shipment_item]
+                elif not isinstance(shipment_item, list):
+                    shipment_items["OrderShipmentItem"] = []
+        
+        return row
