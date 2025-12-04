@@ -143,4 +143,4 @@ dmypy.json
 
 
 catalog.json
-account-*.jsonl
+*.jsonl
