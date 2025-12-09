@@ -189,6 +189,23 @@ class ItemStream(LightspeedRSeriesStream):
             ),
         ),
         th.Property(
+            "ItemComponents",
+            th.ObjectType(
+                th.Property(
+                    "ItemComponent",
+                    th.ArrayType(
+                        th.ObjectType(
+                            th.Property("itemComponentID", th.StringType),
+                            th.Property("quantity", th.StringType),
+                            th.Property("componentGroup", th.StringType),
+                            th.Property("assemblyItemID", th.StringType),
+                            th.Property("componentItemID", th.StringType),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        th.Property(
             "ItemUUID",
             th.ObjectType(
                 th.Property(
@@ -254,6 +271,18 @@ class ItemStream(LightspeedRSeriesStream):
                 # If it's already a list, keep it as is
                 elif not isinstance(item_vendor_num, list):
                     item_vendor_nums["ItemVendorNum"] = []
+        
+        # Normalize ItemComponents.ItemComponent: convert single object to array
+        if "ItemComponents" in row and row["ItemComponents"]:
+            item_components = row["ItemComponents"]
+            if "ItemComponent" in item_components:
+                item_component = item_components["ItemComponent"]
+                # If it's a dict (single object), convert to array
+                if isinstance(item_component, dict):
+                    item_components["ItemComponent"] = [item_component]
+                # If it's already a list, keep it as is
+                elif not isinstance(item_component, list):
+                    item_components["ItemComponent"] = []
         
         return row
 
@@ -322,9 +351,11 @@ class VendorStream(LightspeedRSeriesStream):
                     th.ObjectType(
                         th.Property(
                             "ContactPhone",
-                            th.ObjectType(
-                                th.Property("number", th.StringType),
-                                th.Property("useType", th.StringType),
+                            th.ArrayType(
+                                th.ObjectType(
+                                    th.Property("number", th.StringType),
+                                    th.Property("useType", th.StringType),
+                                ),
                             ),
                         ),
                     ),
@@ -334,9 +365,11 @@ class VendorStream(LightspeedRSeriesStream):
                     th.ObjectType(
                         th.Property(
                             "ContactEmail",
-                            th.ObjectType(
-                                th.Property("address", th.StringType),
-                                th.Property("useType", th.StringType),
+                            th.ArrayType(
+                                th.ObjectType(
+                                    th.Property("address", th.StringType),
+                                    th.Property("useType", th.StringType),
+                                ),
                             ),
                         ),
                     ),
@@ -346,8 +379,10 @@ class VendorStream(LightspeedRSeriesStream):
                     th.ObjectType(
                         th.Property(
                             "ContactWebsite",
-                            th.ObjectType(
-                                th.Property("url", th.StringType),
+                            th.ArrayType(
+                                th.ObjectType(
+                                    th.Property("url", th.StringType),
+                                ),
                             ),
                         ),
                     ),
@@ -380,6 +415,39 @@ class VendorStream(LightspeedRSeriesStream):
         if context:
             row["accountID"] = context.get("accountID")
             row["account_name"] = context.get("account_name")
+        
+        # Normalize Contact.Phones.ContactPhone: convert single object to array
+        if "Contact" in row and row["Contact"]:
+            contact = row["Contact"]
+            if "Phones" in contact and contact["Phones"]:
+                phones = contact["Phones"]
+                if "ContactPhone" in phones:
+                    contact_phone = phones["ContactPhone"]
+                    if isinstance(contact_phone, dict):
+                        phones["ContactPhone"] = [contact_phone]
+                    elif not isinstance(contact_phone, list):
+                        phones["ContactPhone"] = []
+            
+            # Normalize Contact.Emails.ContactEmail: convert single object to array
+            if "Emails" in contact and contact["Emails"]:
+                emails = contact["Emails"]
+                if "ContactEmail" in emails:
+                    contact_email = emails["ContactEmail"]
+                    if isinstance(contact_email, dict):
+                        emails["ContactEmail"] = [contact_email]
+                    elif not isinstance(contact_email, list):
+                        emails["ContactEmail"] = []
+            
+            # Normalize Contact.Websites.ContactWebsite: convert single object to array
+            if "Websites" in contact and contact["Websites"]:
+                websites = contact["Websites"]
+                if "ContactWebsite" in websites:
+                    contact_website = websites["ContactWebsite"]
+                    if isinstance(contact_website, dict):
+                        websites["ContactWebsite"] = [contact_website]
+                    elif not isinstance(contact_website, list):
+                        websites["ContactWebsite"] = []
+        
         return row
 
 
