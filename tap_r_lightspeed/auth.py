@@ -22,97 +22,10 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
     ) -> None:
         super().__init__(stream=stream, auth_endpoint=auth_endpoint, oauth_scopes=oauth_scopes)
         self._tap = stream._tap
-        # Track if we've already attempted a refresh to avoid infinite loops
-        self._refresh_attempted = False
-        
-        # Initialize token from config if available (to avoid unnecessary refreshes)
-        # According to Lightspeed R-Series docs: https://developers.lightspeedhq.com/retail/authentication/
-        # We should use the access token until it expires, then request a new one.
-        # Tokens generally expire after 60 minutes (3600 seconds).
-        if "access_token" in self.config and self.config["access_token"]:
-            self.access_token = self.config["access_token"]
-            
-            # Calculate expires_in and last_refreshed from expires timestamp if available
-            # expires is an absolute timestamp in seconds since Unix epoch
-            if "expires" in self.config and self.config["expires"]:
-                try:
-                    expires_timestamp = int(self.config["expires"])
-                    current_timestamp = int(utils.now().timestamp())
-                    remaining_seconds = expires_timestamp - current_timestamp
-                    
-                    if remaining_seconds > 0:
-                        self.expires_in = remaining_seconds
-                        # Calculate when token was refreshed: expires - original_expires_in
-                        # If we have expires_in in config, use it to calculate last_refreshed
-                        if "expires_in" in self.config and self.config["expires_in"]:
-                            original_expires_in = int(self.config["expires_in"])
-                            # last_refreshed = expires - original_expires_in
-                            last_refreshed_timestamp = expires_timestamp - original_expires_in
-                            # Convert timestamp to datetime
-                            from datetime import datetime, timezone
-                            self.last_refreshed = datetime.fromtimestamp(last_refreshed_timestamp, tz=timezone.utc)
-                        else:
-                            # If no original expires_in, use remaining_seconds as expires_in
-                            # and assume token was just refreshed (conservative approach)
-                            self.last_refreshed = utils.now()
-                    else:
-                        # Token already expired - will trigger refresh
-                        self.expires_in = 0
-                        self.last_refreshed = None
-                except (ValueError, TypeError) as e:
-                    # If expires is invalid, try to use expires_in
-                    self.logger.debug(f"Could not parse expires timestamp: {e}")
-                    if "expires_in" in self.config and self.config["expires_in"]:
-                        self.expires_in = int(self.config["expires_in"])
-                        # Without expires timestamp, assume token was just refreshed
-                        self.last_refreshed = utils.now()
-                    else:
-                        self.expires_in = None
-                        self.last_refreshed = None
-            elif "expires_in" in self.config and self.config["expires_in"]:
-                # Use expires_in if expires timestamp not available
-                self.expires_in = int(self.config["expires_in"])
-                # Without expires timestamp, assume token was just refreshed
-                self.last_refreshed = utils.now()
-            else:
-                # No expiration info, assume token is valid (never expires)
-                self.expires_in = None
-                self.last_refreshed = utils.now()
 
     @property
-    def auth_headers(self) -> dict:
-        """Return headers to be used on authenticated requests.
-        
-        Override to ensure token is refreshed if needed before returning headers.
-        """
-        # Check if token is valid, if not, refresh it
-        if not self.is_token_valid():
-            if not self._refresh_attempted:
-                self.logger.info("Token is invalid or expired, refreshing...")
-                self.update_access_token()
-            else:
-                self.logger.warning(
-                    "Token refresh already attempted but failed. "
-                    "This may indicate a problem with refresh_token or API endpoint."
-                )
-        return super().auth_headers
-    
-    @property
     def oauth_request_body(self) -> dict:
-        """Define the OAuth request body for the Lightspeed R-Series API refresh token grant.
-        
-        According to Lightspeed R-Series documentation:
-        https://developers.lightspeedhq.com/retail/authentication/refresh-token/
-        
-        The refresh token request requires:
-        - client_id: Your application's client ID
-        - client_secret: Your application's client secret
-        - grant_type: "refresh_token"
-        - refresh_token: The refresh token to exchange for a new access token
-        
-        Note: Refresh tokens should only be used when the access token has expired or shortly
-        before expiration. Excessive use may result in rate limiting.
-        """
+        """Define the OAuth request body for the Lightspeed R-Series API."""
         return {
             "client_id": self.config["client_id"],
             "client_secret": self.config["client_secret"],
@@ -126,126 +39,63 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
         Returns:
             True if the token is valid (fresh).
         """
-        # If we have an expires timestamp in config, use it for more accurate validation
-        if "expires" in self.config and self.config["expires"]:
-            try:
-                expires_timestamp = int(self.config["expires"])
-                current_timestamp = int(utils.now().timestamp())
-                # Add 60 second buffer to refresh before actual expiration
-                if current_timestamp >= (expires_timestamp - 60):
-                    self.logger.debug(
-                        f"Token expires at {expires_timestamp}, current time {current_timestamp}. "
-                        "Token is expired or will expire soon, will refresh."
-                    )
-                    return False
-                return True
-            except (ValueError, TypeError) as e:
-                self.logger.debug(f"Could not parse expires timestamp: {e}")
-        
-        # Fallback to expires_in and last_refreshed
         if self.expires_in is not None:
             self.expires_in = int(self.expires_in)
         if self.last_refreshed is None:
             return False
         if not self.expires_in:
             return True
-        # Add 60 second buffer to refresh before actual expiration
-        elapsed = (utils.now() - self.last_refreshed).total_seconds()
-        if elapsed >= (self.expires_in - 60):
-            self.logger.debug(
-                f"Token expired or will expire soon. Elapsed: {elapsed}s, expires_in: {self.expires_in}s"
-            )
-            return False
-        return True
+        if self.expires_in > (utils.now() - self.last_refreshed).total_seconds():
+            return True
+        return False
 
     @classmethod
     def create_for_stream(cls, stream) -> "LightspeedOAuthAuthenticator":
-        """Create an authenticator instance for the given stream.
-        
-        For Lightspeed R-Series, the token endpoint is global (not domain-specific):
-        https://cloud.lightspeedapp.com/auth/oauth/token
-        
-        See: https://developers.lightspeedhq.com/retail/authentication/refresh-token/
-        
-        Returns:
-            LightspeedOAuthAuthenticator instance configured with Lightspeed R-Series token endpoint.
-        """
-        # R-Series uses a global OAuth endpoint, not domain-specific
-        auth_endpoint = "https://cloud.lightspeedapp.com/auth/oauth/token"
         return cls(
             stream=stream,
-            auth_endpoint=auth_endpoint,
+            auth_endpoint="https://cloud.lightspeedapp.com/auth/oauth/token",
         )
 
+    # Authentication and refresh
     def update_access_token(self) -> None:
         """Update `access_token` along with: `last_refreshed` and `expires_in`.
-
-        According to Lightspeed R-Series rate limiting docs:
-        https://developers.lightspeedhq.com/retail/introduction/ratelimits/
-        If we receive a 429 (Too Many Requests), we should respect the Retry-After header.
-        
-        Note: Refresh tokens should only be used when necessary. Excessive use may result
-        in rate limiting or your client being blocked.
 
         Raises:
             RuntimeError: When OAuth login fails.
         """
-        self.logger.info("Refreshing access token...")
-        self._refresh_attempted = True
         request_time = utc_now()
-        # Use oauth_request_body directly and send as x-www-form-encoded
         auth_request_payload = self.oauth_request_body
-        self.logger.debug(f"Token refresh request payload: {auth_request_payload}")
         token_response = requests.post(
             self.auth_endpoint,
-            data=auth_request_payload,  # data= sends as x-www-form-encoded
+            data=auth_request_payload,
             headers={"Content-Type": "application/x-www-form-urlencoded"}
         )
         
-        # Handle rate limiting (429 Too Many Requests)
+        # Handle rate limiting (429)
         if token_response.status_code == 429:
             retry_after = token_response.headers.get("Retry-After")
-            error_msg = "Rate limit exceeded"
-            try:
-                error_json = token_response.json()
-                error_msg = error_json.get("message", error_msg)
-            except:
-                error_msg = token_response.text or error_msg
-            
             if retry_after:
-                # Retry-After is in HTTP date format (RFC1123)
                 from email.utils import parsedate_to_datetime
                 try:
                     retry_datetime = parsedate_to_datetime(retry_after)
                     wait_seconds = (retry_datetime - utc_now()).total_seconds()
                     if wait_seconds > 0:
-                        self.logger.warning(
-                            f"Rate limited on token refresh. Waiting {wait_seconds:.0f} seconds "
-                            f"until {retry_datetime} before retrying."
-                        )
                         import time
                         time.sleep(wait_seconds)
-                        # Retry the request
                         token_response = requests.post(
                             self.auth_endpoint,
                             data=auth_request_payload,
                             headers={"Content-Type": "application/x-www-form-urlencoded"}
                         )
-                    else:
-                        # Retry immediately if wait time has passed
-                        token_response = requests.post(
-                            self.auth_endpoint,
-                            data=auth_request_payload,
-                            headers={"Content-Type": "application/x-www-form-urlencoded"}
-                        )
-                except Exception as e:
-                    self.logger.warning(f"Could not parse Retry-After header '{retry_after}': {e}")
+                except Exception:
+                    import time
+                    time.sleep(60)
+                    token_response = requests.post(
+                        self.auth_endpoint,
+                        data=auth_request_payload,
+                        headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    )
             else:
-                # No Retry-After header, wait 60 seconds as fallback
-                self.logger.warning(
-                    "Rate limited on token refresh. No Retry-After header. "
-                    "Waiting 60 seconds before retrying."
-                )
                 import time
                 time.sleep(60)
                 token_response = requests.post(
@@ -254,53 +104,16 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
                     headers={"Content-Type": "application/x-www-form-urlencoded"}
                 )
         
-        # Log response details for debugging
-        self.logger.debug(f"Token refresh response status: {token_response.status_code}")
-        self.logger.debug(f"Token refresh response headers: {dict(token_response.headers)}")
-        
         try:
             token_response.raise_for_status()
             self.logger.info("OAuth authorization attempt was successful.")
-        except requests.exceptions.HTTPError as ex:
-            error_msg = "Unknown error"
-            try:
-                error_json = token_response.json()
-                error_msg = json.dumps(error_json)
-                self.logger.error(f"Token refresh failed with HTTP {token_response.status_code}: {error_msg}")
-            except:
-                error_msg = token_response.text
-                self.logger.error(f"Token refresh failed with HTTP {token_response.status_code}: {error_msg}")
-            
-            # Log the request details for debugging
-            self.logger.error(f"Token refresh endpoint: {self.auth_endpoint}")
-            self.logger.error(f"Token refresh payload keys: {list(auth_request_payload.keys())}")
-            
-            raise RuntimeError(
-                f"Failed OAuth login, response was '{error_msg}'. Status: {token_response.status_code}"
-            )
         except Exception as ex:
-            error_msg = "Unknown error"
-            try:
-                error_msg = token_response.text
-            except:
-                pass
-            self.logger.error(f"Unexpected error during token refresh: {ex}")
             raise RuntimeError(
-                f"Failed OAuth login, response was '{error_msg}'. {ex}"
+                f"Failed OAuth login, response was '{token_response.json()}'. {ex}"
             )
         token_json = token_response.json()
         self.access_token = token_json["access_token"]
-        # Lightspeed R-Series tokens generally expire after 60 minutes (3600 seconds)
-        # Refresh tokens may return tokens with different expiry times (e.g., 1800 seconds / 30 minutes)
-        # Use expires_in from response, default to 3600 (60 minutes) if not present
-        # See: https://developers.lightspeedhq.com/retail/authentication/refresh-token/
         self.expires_in = token_json.get("expires_in", 3600)
-        self._refresh_attempted = False  # Reset after successful refresh
-        
-        self.logger.info(
-            f"Token refreshed successfully. New token expires in {self.expires_in} seconds "
-            f"({self.expires_in / 60:.1f} minutes)"
-        )
         if self.expires_in is None:
             self.logger.debug(
                 "No expires_in received in OAuth response and no "
@@ -309,34 +122,17 @@ class LightspeedOAuthAuthenticator(OAuthAuthenticator, metaclass=SingletonMeta):
             )
         self.last_refreshed = request_time
 
-        # Store access_token, refresh_token, expires, and expires_in in config file
-        # This allows the tokens to persist across tap runs
+        # store access_token in config file
         self._tap._config["access_token"] = token_json["access_token"]
         if "refresh_token" in token_json:
             self._tap._config["refresh_token"] = token_json["refresh_token"]
         
-        # Store expires timestamp (absolute time when token expires)
-        # This is more reliable than expires_in for checking validity across runs
+        # Store expires timestamp
         if self.expires_in:
             expires_timestamp = int(request_time.timestamp()) + int(self.expires_in)
             self._tap._config["expires"] = expires_timestamp
         self._tap._config["expires_in"] = self.expires_in
 
-        # Save to config file if config_file path is available
-        if self._tap.config_file:
-            try:
-                with open(self._tap.config_file, "w") as outfile:
-                    json.dump(self._tap._config, outfile, indent=4)
-                self.logger.info(
-                    f"Successfully saved new access token to config file: {self._tap.config_file}"
-                )
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to save access token to config file {self._tap.config_file}: {e}"
-                )
-        else:
-            self.logger.warning(
-                "config_file not set in tap. New access token will not be persisted to disk. "
-                "Set config_file in Tap.__init__ to enable token persistence."
-            )
+        with open(self._tap.config_file, "w") as outfile:
+            json.dump(self._tap._config, outfile, indent=4)
 

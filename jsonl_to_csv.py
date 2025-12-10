@@ -7,6 +7,7 @@ Uso: python jsonl_to_csv.py [diretório_output]
 import json
 import csv
 import sys
+import shutil
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -77,15 +78,27 @@ def main():
     else:
         output_dir = Path('output')
     
-    if not output_dir.exists():
-        print(f"Erro: Diretório '{output_dir}' não existe.", file=sys.stderr)
-        sys.exit(1)
+    # Criar diretório output se não existir
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Encontrar todos os ficheiros JSONL
+    # Encontrar todos os ficheiros JSONL na root dir
+    root_dir = Path('.')
+    root_jsonl_files = list(root_dir.glob('*.jsonl'))
+    
+    # Mover arquivos .jsonl da root para output
+    moved_files = []
+    for jsonl_file in root_jsonl_files:
+        destination = output_dir / jsonl_file.name
+        if jsonl_file != destination:  # Evitar mover para o mesmo lugar
+            shutil.move(str(jsonl_file), str(destination))
+            moved_files.append(destination)
+            print(f"✓ Movido: {jsonl_file.name} -> {output_dir.name}/")
+    
+    # Encontrar todos os ficheiros JSONL no diretório output (incluindo os movidos)
     jsonl_files = list(output_dir.glob('*.jsonl'))
     
     if not jsonl_files:
-        print(f"Nenhum ficheiro .jsonl encontrado em '{output_dir}'")
+        print(f"Nenhum ficheiro .jsonl encontrado em '{output_dir}' ou na root dir")
         print("Execute primeiro: tap-x-lightspeed --config config.json --catalog catalog.json | target-jsonl")
         sys.exit(1)
     
@@ -94,7 +107,18 @@ def main():
         csv_path = jsonl_path.with_suffix('.csv')
         jsonl_to_csv(jsonl_path, csv_path)
     
+    # Remover arquivos .jsonl após conversão
+    removed_count = 0
+    for jsonl_path in jsonl_files:
+        try:
+            jsonl_path.unlink()
+            removed_count += 1
+            print(f"✓ Removido: {jsonl_path.name}")
+        except Exception as e:
+            print(f"⚠ Erro ao remover {jsonl_path.name}: {e}", file=sys.stderr)
+    
     print(f"\n✓ Conversão concluída! {len(jsonl_files)} ficheiro(s) convertido(s).")
+    print(f"✓ {removed_count} ficheiro(s) .jsonl removido(s). Apenas CSVs mantidos.")
 
 
 if __name__ == '__main__':
